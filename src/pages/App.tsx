@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react'
-import { Box, Button, Stack, Typography, TextField, FormControlLabel, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
+import { Box, Button, Stack, Typography, TextField, FormControlLabel, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton } from '@mui/material'
 import Viewer from './Viewer'
 import DeviceList from '../components/DeviceList'
 import ScriptList from '../components/ScriptList'
@@ -144,14 +144,19 @@ export default function App(){
   }
 
   const handleUnsavedSave = () => {
-    setUnsavedOpen(false)
+    // First save programmatically (device save avoids auto-close to prevent re-check loops)
     if (dirtyFormTypeRef.current === 'script' && scriptFormRef.current && scriptFormRef.current.save){
       scriptFormRef.current.save()
     } else if (dirtyFormTypeRef.current === 'device' && deviceFormRef.current && deviceFormRef.current.save){
-      deviceFormRef.current.save()
+      // pass false to avoid calling onClose inside the device form which would re-trigger the unsaved check
+      deviceFormRef.current.save(false)
     }
-    // after save, perform pending action
+
+    // then perform pending action (select / close)
     if (unsavedActionRef.current) { unsavedActionRef.current(); unsavedActionRef.current = null }
+
+    // finally close dialog and clear refs
+    setUnsavedOpen(false)
     dirtyFormTypeRef.current = null
     currentUnsavedTargetRef.current = null
   }
@@ -211,7 +216,22 @@ export default function App(){
 
       {/* Search area */}
       <Stack direction='row' spacing={1} alignItems='center'>
-        <TextField placeholder='Search devices...' value={searchText} onChange={e=>setSearchText(e.target.value)} size='small' sx={{minWidth: 300}} />
+        <TextField
+          placeholder='Search devices...'
+          value={searchText}
+          onChange={e=>setSearchText(e.target.value)}
+          size='small'
+          sx={{minWidth: 300}}
+          InputProps={{
+            endAdornment: searchText ? (
+              <InputAdornment position='end'>
+                <IconButton size='small' edge='end' aria-label='clear search' onClick={() => setSearchText('')}>
+                  ✕
+                </IconButton>
+              </InputAdornment>
+            ) : undefined
+          }}
+        />
         <FormControlLabel control={<Checkbox checked={searchInScripts} onChange={e=>setSearchInScripts(e.target.checked)} />} label='Include scripts' />
         <Button variant='contained' onClick={()=>{ /* explicit search button — filtering is live */ }}>Search</Button>
       </Stack>
