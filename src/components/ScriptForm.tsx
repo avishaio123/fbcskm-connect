@@ -1,10 +1,16 @@
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { Device, ScriptInstance, updateScript } from '../store/fbcskmSlice'
 import { useAppDispatch } from '../store/store'
 
-export default function ScriptForm({ device, script, onChange }: { device: Device, script: ScriptInstance, onChange: (s: ScriptInstance)=>void }){
+export type ScriptFormHandle = {
+  isDirty: () => boolean
+  save: () => void
+  discard: () => void
+}
+
+export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInstance, onChange: (s: ScriptInstance)=>void }>(function ScriptForm({ device, script, onChange }, ref){
   const dispatch = useAppDispatch()
   const [draft, setDraft] = useState<ScriptInstance>(script)
 
@@ -12,6 +18,12 @@ export default function ScriptForm({ device, script, onChange }: { device: Devic
   useEffect(() => {
     setDraft(script)
   }, [script])
+
+  useImperativeHandle(ref, () => ({
+    isDirty: () => JSON.stringify(draft) !== JSON.stringify(script),
+    save: () => { dispatch(updateScript({ deviceId: device.id, script: draft })); onChange(draft) },
+    discard: () => setDraft(script)
+  }), [draft, script, device, dispatch, onChange])
 
   const set = (path: string, value: any) => {
     setDraft(prev => {
@@ -125,4 +137,4 @@ export default function ScriptForm({ device, script, onChange }: { device: Devic
       </Box>
     </Stack>
   )
-}
+})

@@ -1,16 +1,30 @@
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Drawer, Box, Stack, Typography, TextField, Button, Grid } from '@mui/material'
 import { Device, updateDevice } from '../store/fbcskmSlice'
 import { useAppDispatch } from '../store/store'
 
 interface Props { open: boolean; device?: Device | null; onClose: ()=>void }
 
-export default function DeviceForm({ open, device, onClose }: Props){
+export type DeviceFormHandle = {
+  isDirty: () => boolean
+  save: () => void
+  discard: () => void
+}
+
+export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, device, onClose }, ref){
   const dispatch = useAppDispatch()
   const [draft, setDraft] = useState<Device | null>(device ?? null)
   useEffect(()=>{ setDraft(device ?? null) }, [device])
+
+  useImperativeHandle(ref, () => ({
+    isDirty: () => JSON.stringify(draft) !== JSON.stringify(device),
+    save: () => { if (!draft) return; if (!draft.name || !draft.name.trim()) { alert('Device Name/IP is required'); return } ; const withDefaults: Device = { ...draft, port: draft.port ?? 5985, connectionTimeoutMs: draft.connectionTimeoutMs ?? 2000, connectionPollSec: draft.connectionPollSec ?? 60 }; dispatch(updateDevice(withDefaults)); onClose() },
+    discard: () => setDraft(device ?? null)
+  }), [draft, device, dispatch, onClose])
+
   const set = (key: keyof Device, value: any) => { if(!draft) return; setDraft({ ...draft, [key]: value }) }
+
   const save = () => {
     if (!draft) return
     if (!draft.name || !draft.name.trim()) { alert('Device Name/IP is required'); return }
@@ -47,4 +61,4 @@ export default function DeviceForm({ open, device, onClose }: Props){
       </Box>
     </Drawer>
   )
-}
+})

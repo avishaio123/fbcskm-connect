@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react'
-import { Box, Button, Stack, Typography, TextField, FormControlLabel, Checkbox } from '@mui/material'
+import { Box, Button, Stack, Typography, TextField, FormControlLabel, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
 import Viewer from './Viewer'
 import DeviceList from '../components/DeviceList'
 import ScriptList from '../components/ScriptList'
@@ -38,6 +38,11 @@ export default function App(){
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null)
   const [deviceFormOpen, setDeviceFormOpen] = useState(false)
 
+  // Unsaved changes dialog state
+  const [unsavedOpen, setUnsavedOpen] = useState(false)
+  const unsavedActionRef = React.useRef<() => void | null>(null)
+  const currentUnsavedTargetRef = React.useRef<{type:'device'|'script'|'closeDeviceForm', payload?: any } | null>(null)
+
   // Search state
   const [searchText, setSearchText] = useState('')
   const [searchInScripts, setSearchInScripts] = useState(true) // default checked
@@ -66,6 +71,109 @@ export default function App(){
       return false
     })
   }, [devices, searchText, searchInScripts])
+
+  // Refs to forms to check dirty state and call save/discard programmatically
+  const scriptFormRef = React.useRef<any>(null)
+  const deviceFormRef = React.useRef<any>(null)
+  const dirtyFormTypeRef = React.useRef<'script'|'device'|null>(null)
+
+  const requestSelectDevice = (id: string|null) => {
+    // If switching to same device, allow
+    if (id === selectedDeviceId) { setSelectedDeviceId(id); return }
+
+    // If a script is being edited and dirty, prompt first
+    if (selectedScriptId && scriptFormRef.current && scriptFormRef.current.isDirty && scriptFormRef.current.isDirty()){
+      dirtyFormTypeRef.current = 'script'
+      currentUnsavedTargetRef.current = { type: 'device', payload: { id } }
+      unsavedActionRef.current = () => { setSelectedDeviceId(id); setSelectedScriptId(null) }
+      setUnsavedOpen(true)
+      return
+    }
+
+    // If device form is open and dirty, prompt
+    if (deviceFormOpen && deviceFormRef.current && deviceFormRef.current.isDirty && deviceFormRef.current.isDirty()){
+      dirtyFormTypeRef.current = 'device'
+      currentUnsavedTargetRef.current = { type: 'device', payload: { id } }
+      unsavedActionRef.current = () => { setSelectedDeviceId(id); setSelectedScriptId(null) }
+      setUnsavedOpen(true)
+      return
+    }
+
+    // No dirty state, proceed
+    setSelectedDeviceId(id)
+    setSelectedScriptId(null)
+  }
+
+  const requestOpenDeviceForm = (id: string|null) => {
+    // Selecting a device and opening its form — guard as above
+    if (id !== selectedDeviceId) {
+      requestSelectDevice(id)
+      // If there were no dirty blockers then the selection happened and we can open immediately
+      if (!unsavedOpen) setDeviceFormOpen(true)
+    } else {
+      // same device - just open
+      setDeviceFormOpen(true)
+    }
+  }
+
+  const requestSelectScript = (scriptId: string | null, deviceId?: string | null) => {
+    // If selecting same script, nothing
+    if (scriptId === selectedScriptId) { setSelectedScriptId(scriptId); return }
+
+    if (scriptFormRef.current && scriptFormRef.current.isDirty && scriptFormRef.current.isDirty()){
+      dirtyFormTypeRef.current = 'script'
+      currentUnsavedTargetRef.current = { type: 'script', payload: { scriptId, deviceId } }
+      unsavedActionRef.current = () => { if (deviceId) setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }
+      setUnsavedOpen(true)
+      return
+    }
+
+    setSelectedDeviceId(deviceId || null)
+    setSelectedScriptId(scriptId)
+  }
+
+  const handleDeviceFormClose = () => {
+    if (deviceFormRef.current && deviceFormRef.current.isDirty && deviceFormRef.current.isDirty()){
+      dirtyFormTypeRef.current = 'device'
+      currentUnsavedTargetRef.current = { type: 'closeDeviceForm' }
+      unsavedActionRef.current = () => setDeviceFormOpen(false)
+      setUnsavedOpen(true)
+      return
+    }
+    setDeviceFormOpen(false)
+  }
+
+  const handleUnsavedSave = () => {
+    setUnsavedOpen(false)
+    if (dirtyFormTypeRef.current === 'script' && scriptFormRef.current && scriptFormRef.current.save){
+      scriptFormRef.current.save()
+    } else if (dirtyFormTypeRef.current === 'device' && deviceFormRef.current && deviceFormRef.current.save){
+      deviceFormRef.current.save()
+    }
+    // after save, perform pending action
+    if (unsavedActionRef.current) { unsavedActionRef.current(); unsavedActionRef.current = null }
+    dirtyFormTypeRef.current = null
+    currentUnsavedTargetRef.current = null
+  }
+
+  const handleUnsavedDiscard = () => {
+    setUnsavedOpen(false)
+    if (dirtyFormTypeRef.current === 'script' && scriptFormRef.current && scriptFormRef.current.discard){
+      scriptFormRef.current.discard()
+    } else if (dirtyFormTypeRef.current === 'device' && deviceFormRef.current && deviceFormRef.current.discard){
+      deviceFormRef.current.discard()
+    }
+    if (unsavedActionRef.current) { unsavedActionRef.current(); unsavedActionRef.current = null }
+    dirtyFormTypeRef.current = null
+    currentUnsavedTargetRef.current = null
+  }
+
+  const handleUnsavedCancel = () => {
+    setUnsavedOpen(false)
+    unsavedActionRef.current = null
+    currentUnsavedTargetRef.current = null
+    dirtyFormTypeRef.current = null
+  }
 
   return (
     <ErrorBoundary>
@@ -110,8 +218,8 @@ export default function App(){
 
       {/* One clean device list — scripts shown on selection */}
       <Stack direction='row' spacing={2}>
-        <DeviceList devices={filteredDevices} selectedId={selectedDeviceId} onSelect={setSelectedDeviceId as any} onRequestEdit={(id)=>{ setSelectedDeviceId(id); setDeviceFormOpen(true) }} />
-        <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>setSelectedScriptId(id)} onRequestEdit={(scriptId, deviceId)=>{ setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }} onSelectScript={(scriptId, deviceId)=>{ setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }} />
+        <DeviceList devices={filteredDevices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} />
+        <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>requestSelectScript(id, selectedDeviceId)} onRequestEdit={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId); }} onSelectScript={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId) }} />
       </Stack>
 
       {(() => {
@@ -119,10 +227,23 @@ export default function App(){
         if (!d) return null
         const s = d.scripts.find(x=>x.id===selectedScriptId)
         if (!s) return null
-        return <ScriptForm device={d} script={s} onChange={()=>{}} />
+        return <ScriptForm ref={scriptFormRef} device={d} script={s} onChange={()=>{}} />
       })()}
 
-      <DeviceForm open={deviceFormOpen} device={devices.find(x=>x.id===selectedDeviceId) || null} onClose={()=>setDeviceFormOpen(false)} />
+      <DeviceForm ref={deviceFormRef} open={deviceFormOpen} device={devices.find(x=>x.id===selectedDeviceId) || null} onClose={handleDeviceFormClose} />
+
+      {/* Unsaved changes dialog */}
+      <Dialog open={unsavedOpen} onClose={handleUnsavedCancel}>
+        <DialogTitle>Unsaved changes</DialogTitle>
+        <DialogContent>
+          <Typography>You have unsaved changes. Do you want to save them or discard?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleUnsavedCancel}>Cancel</Button>
+          <Button color='error' onClick={handleUnsavedDiscard}>Discard Changes</Button>
+          <Button variant='contained' onClick={handleUnsavedSave}>Save Changes</Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
     </ErrorBoundary>
   )
