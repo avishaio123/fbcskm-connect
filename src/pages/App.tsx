@@ -20,7 +20,18 @@ declare global {
   }
 }
 
+import ErrorBoundary from '../components/ErrorBoundary'
+
 export default function App(){
+  // Global error logging to help capture runtime issues in dev
+  React.useEffect(()=>{
+    const onErr = (ev: any) => { console.error('window.onerror', ev) }
+    const onRej = (ev: any) => { console.error('unhandledrejection', ev) }
+    window.addEventListener('error', onErr)
+    window.addEventListener('unhandledrejection', onRej)
+    return () => { window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej) }
+  }, [])
+
   const [filePath, setFilePath] = useState<string | null>(null)
   const [raw, setRaw] = useState<string>('')
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null)
@@ -57,6 +68,7 @@ export default function App(){
   }, [devices, searchText, searchInScripts])
 
   return (
+    <ErrorBoundary>
     <Stack spacing={2} sx={{py: 3}}>
       <Typography variant='h4'>FBCSKM Manager (CRUD, restmon only)</Typography>
 
@@ -112,5 +124,6 @@ export default function App(){
 
       <DeviceForm open={deviceFormOpen} device={devices.find(x=>x.id===selectedDeviceId) || null} onClose={()=>setDeviceFormOpen(false)} />
     </Stack>
+    </ErrorBoundary>
   )
 }
