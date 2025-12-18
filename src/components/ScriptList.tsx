@@ -1,15 +1,29 @@
 
 import React, { useState } from 'react'
-import { Button, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography } from '@mui/material'
+import { Button, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem } from '@mui/material'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useAppDispatch, useAppSelector } from '../store/store'
 import { addScript, deleteScript } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
 
-export default function ScriptList({ deviceId, selectedId, onSelect }: { deviceId?: string|null, selectedId?: string|null, onSelect: (id: string)=>void }){
+export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEdit, onSelectScript }: { deviceId?: string|null, selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string, deviceId: string)=>void, onSelectScript?: (id: string, deviceId: string)=>void }){
   const dispatch = useAppDispatch()
   const dev = useAppSelector(s=>s.fbcskm.devices.find(d=>d.id===deviceId))
   const [instanceName, setInstanceName] = useState('NEW_Script')
   const [scriptPath, setScriptPath] = useState('/myscripts/RestMon.ps1')
+
+  // menu state
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const [menuScriptId, setMenuScriptId] = useState<string | null>(null)
+
+  const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuScriptId(id) }
+  const closeMenu = () => { setMenuAnchor(null); setMenuScriptId(null) }
+
+  const onEdit = (id: string) => {
+    // ensure parent knows which device the script belongs to so App can render the ScriptForm
+    onSelect(id)
+    if (onRequestEdit && deviceId) onRequestEdit(id, deviceId)
+  }
 
   if (!dev) return <Typography color='text.secondary'>Select a device.</Typography>
 
@@ -17,7 +31,22 @@ export default function ScriptList({ deviceId, selectedId, onSelect }: { deviceI
     dispatch(addScript({ deviceId: dev.id, script: { id: uuid(), instanceName, scriptPath, args: { method: 'GET', outputFormat: 'json' }, pollIntervalSec: 300, timeoutSec: 300 } }))
     setInstanceName('NEW_Script'); setScriptPath('/myscripts/RestMon.ps1')
   }
-  const remove = (id: string) => dispatch(deleteScript({ deviceId: dev.id, scriptId: id }))
+
+  const remove = (id: string) => {
+    const s = dev.scripts.find(x=>x.id===id)
+    if (!s) return
+    if (!confirm(`Delete script '${s.instanceName}'?`)) return
+    dispatch(deleteScript({ deviceId: dev.id, scriptId: id }))
+    if (selectedId === id) onSelect(null)
+  }
+
+  const duplicate = (id: string) => {
+    const s = dev.scripts.find(x=>x.id===id)
+    if (!s) return
+    const copy = { ...s, id: uuid(), instanceName: `${s.instanceName} (copy)` }
+    dispatch(addScript({ deviceId: dev.id, script: copy }))
+    onSelect(copy.id)
+  }
 
   return (
     <Stack spacing={2} sx={{minWidth: 420}}>
@@ -28,15 +57,25 @@ export default function ScriptList({ deviceId, selectedId, onSelect }: { deviceI
         <Button variant='contained' onClick={create}>Add</Button>
       </Stack>
       <List dense>
-        {dev.scripts.map(s=> (
-          <ListItem key={s.id} secondaryAction={<Button color='error' onClick={()=>remove(s.id)}>Delete</Button>}>
-            <ListItemButton selected={selectedId===s.id} onClick={()=>onSelect(s.id)}>
+        {dev.scripts.map((s, idx) => (
+          <ListItem key={s.id} secondaryAction={
+            <IconButton edge='end' onClick={(e)=>openMenu(e, s.id)} aria-label='actions'>
+              <MoreVertIcon />
+            </IconButton>
+          } sx={{ backgroundColor: idx % 2 === 1 ? 'rgba(25,118,210,0.04)' : 'transparent' }}>
+            <ListItemButton selected={selectedId===s.id} onClick={()=>{ if (onSelectScript) onSelectScript(s.id, dev.id); else onSelect(s.id) }}>
               <ListItemText primary={s.instanceName} secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} />
             </ListItemButton>
           </ListItem>
         ))}
         {dev.scripts.length===0 && <Typography color='text.secondary'>No scripts.</Typography>}
       </List>
+
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+        <MenuItem onClick={()=>{ if (menuScriptId) onEdit(menuScriptId); closeMenu() }}>Edit</MenuItem>
+        <MenuItem onClick={()=>{ if (menuScriptId) duplicate(menuScriptId); closeMenu() }}>Duplicate</MenuItem>
+        <MenuItem onClick={()=>{ if (menuScriptId) remove(menuScriptId); closeMenu() }} sx={{color: 'error.main'}}>Delete</MenuItem>
+      </Menu>
     </Stack>
   )
 }

@@ -5,7 +5,7 @@
   "description": "FBCSKM Manager - React web app with CRUD, Device Form, encoded command rules, backups",
   "main": "index.html",
   "type": "module",
-"scripts": {
+  "scripts": {
     "dev": "vite",
     "build": "vite build",
     "start": "vite"
@@ -13,6 +13,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
+    "@mui/icons-material": "^6.5.0",
     "@mui/material": "^6.1.0",
     "@reduxjs/toolkit": "^2.2.3",
     "react": "^18.2.0",
