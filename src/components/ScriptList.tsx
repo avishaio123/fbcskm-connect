@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button, Box, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem } from '@mui/material'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useAppDispatch, useAppSelector } from '../store/store'
@@ -17,8 +17,22 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
     if (JSON.stringify(s.args || {}).toLowerCase().includes(q)) return true
     return false
   }) : dev.scripts) : []
+  const scriptDefaults = useAppSelector(s => (s.fbcskm as any).defaultScriptSettings || {})
+  const computeDefaultScriptPath = (base: string) => {
+    if (!base || base.trim() === '') return '/myscripts/RestMon.ps1'
+    const b = base.trim()
+    if (b.toLowerCase().endsWith('.ps1') || b.toLowerCase().includes('.ps1')) return b
+    // otherwise treat as directory and append RestMon.ps1
+    return `${b.replace(/\/$/, '')}/RestMon.ps1`
+  }
+
   const [instanceName, setInstanceName] = useState('NEW_Script')
-  const [scriptPath, setScriptPath] = useState('/myscripts/RestMon.ps1')
+  const [scriptPath, setScriptPath] = useState(() => computeDefaultScriptPath(scriptDefaults.matrixKBPath))
+
+  // Update the scriptPath when defaults change so new scripts use the new default
+  useEffect(() => {
+    setScriptPath(computeDefaultScriptPath(scriptDefaults.matrixKBPath))
+  }, [scriptDefaults])
 
   // menu state
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -37,7 +51,7 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
 
   const create = () => {
     dispatch(addScript({ deviceId: dev.id, script: { id: uuid(), instanceName, scriptPath, args: { method: 'GET', outputFormat: 'json' }, pollIntervalSec: 300, timeoutSec: 300 } }))
-    setInstanceName('NEW_Script'); setScriptPath('/myscripts/RestMon.ps1')
+    setInstanceName('NEW_Script'); setScriptPath(computeDefaultScriptPath(scriptDefaults.matrixKBPath))
   }
 
   const remove = (id: string) => {

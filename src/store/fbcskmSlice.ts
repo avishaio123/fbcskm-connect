@@ -41,13 +41,38 @@ export interface Device {
   scripts: ScriptInstance[]
 }
 
+export interface DefaultScriptSettings {
+  matrixKBPath: string
+  genericPath: string
+}
+
 export interface FBCSKMState {
   devices: Device[]
   originalLines?: string[]
   dirty?: boolean
+  defaultDeviceSettings?: Partial<Omit<Device, 'id' | 'name' | 'forcedIp' | 'scripts'>>
+  defaultScriptSettings?: DefaultScriptSettings
 }
 
-const initialState: FBCSKMState = { devices: [], originalLines: [], dirty: false }
+const initialState: FBCSKMState = { 
+  devices: [], 
+  originalLines: [], 
+  dirty: false,
+  defaultDeviceSettings: {
+    port: 5985,
+    connectionTimeoutMs: 2000,
+    connectionPollSec: 300,
+    username: '',
+    password: '',
+    publicKeyPath: '',
+    privateKeyPath: '',
+    passphrase: ''
+  },
+  defaultScriptSettings: {
+    matrixKBPath: 'c:/MatrixKB/Scripts/Restmon',
+    genericPath: 'c:/MatrixKB/Scripts'
+  }
+ }
 
 /**
  * Normalize smart quotes and parse CLI-like args to structured RestMonArgs.
@@ -283,7 +308,13 @@ const slice = createSlice({
       state.dirty = true
     },
     setDirty(state, action: PayloadAction<boolean>) { state.dirty = action.payload },
-    setClipboard(state, action: PayloadAction<any | null>) { (state as any).clipboard = action.payload }
+    setClipboard(state, action: PayloadAction<any | null>) { (state as any).clipboard = action.payload },
+    setDefaultDeviceSettings(state, action: PayloadAction<Partial<Omit<Device, 'id' | 'name' | 'forcedIp' | 'scripts'>>>) {
+      state.defaultDeviceSettings = { ...(state.defaultDeviceSettings || {}), ...action.payload }
+    },
+    setDefaultScriptSettings(state, action: PayloadAction<DefaultScriptSettings>) {
+      state.defaultScriptSettings = action.payload
+    }
   }
 })
 
@@ -296,7 +327,9 @@ export const {
   updateScript,
   deleteScript,
   setDirty,
-  setClipboard
+  setClipboard,
+  setDefaultDeviceSettings,
+  setDefaultScriptSettings
 } = slice.actions
 
 export default slice.reducer

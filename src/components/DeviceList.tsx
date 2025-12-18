@@ -22,9 +22,18 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
 
   const handlePasteToDevice = (deviceId: string) => { console.log('DeviceList: paste requested to', deviceId); if (onPasteScript) onPasteScript(deviceId); closeMenu() }
 
+  const defaults = useAppSelector(s => (s.fbcskm as any).defaultDeviceSettings)
+
   const create = () => {
     if (!name.trim()) return
-    dispatch(addDevice({ id: uuid(), name, forcedIp, scripts: [] }))
+    const base = {
+      ...(defaults || {}),
+      id: uuid(),
+      name,
+      forcedIp,
+      scripts: []
+    }
+    dispatch(addDevice(base as any))
     setName(''); setForcedIp('')
   }
 

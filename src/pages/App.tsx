@@ -21,6 +21,8 @@ declare global {
 }
 
 import ErrorBoundary from '../components/ErrorBoundary'
+import SettingsDialog from '../components/SettingsDialog'
+import SettingsIcon from '@mui/icons-material/Settings'
 
 // Logos
 import BMCHelixLogo from '../../logo/BMCHelix Logo Medium Transparent.png'
@@ -42,6 +44,7 @@ export default function App(){
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null)
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null)
   const [deviceFormOpen, setDeviceFormOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Unsaved changes dialog state
   const [unsavedOpen, setUnsavedOpen] = useState(false)
@@ -271,6 +274,7 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
         <Box sx={{display:'flex', alignItems:'center', justifyContent:'space-between', width: '100%'}}>
           <Typography variant='h4'>PATROL Scripting KM File Based Configuraiton Editor</Typography>
           <Box sx={{display:'flex', gap:2, alignItems:'center'}}>
+            <IconButton size='small' aria-label='settings' onClick={()=>setSettingsOpen(true)}><SettingsIcon /></IconButton>
             <img src={MatrixLogo} alt="Matrix" style={{height:30}} />
             <img src={BMCHelixLogo} alt="BMCHelix" style={{height:34, background: 'transparent'}} />
           </Box>
@@ -368,6 +372,8 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
           <Button variant='contained' onClick={handleUnsavedSave}>Save Changes</Button>
         </DialogActions>
       </Dialog>
+
+      <SettingsDialog open={settingsOpen} onClose={()=>setSettingsOpen(false)} />
 {/* Load unsaved changes confirmation dialog for file open */}
       <Dialog open={loadUnsavedOpen} onClose={()=>setLoadUnsavedOpen(false)}>
         <DialogTitle>Unsaved changes</DialogTitle>
