@@ -19,7 +19,15 @@ export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, d
 
   useImperativeHandle(ref, () => ({
     isDirty: () => JSON.stringify(draft) !== JSON.stringify(device),
-    save: () => { if (!draft) return; if (!draft.name || !draft.name.trim()) { alert('Device Name/IP is required'); return } ; const withDefaults: Device = { ...draft, port: draft.port ?? 5985, connectionTimeoutMs: draft.connectionTimeoutMs ?? 2000, connectionPollSec: draft.connectionPollSec ?? 60 }; dispatch(updateDevice(withDefaults)); onClose() },
+    // save(closeAfter=true) - when called programmatically pass false to avoid triggering onClose that will re-open the unsaved dialog
+    save: (closeAfter: boolean = true) => {
+      if (!draft) return false
+      if (!draft.name || !draft.name.trim()) { alert('Device Name/IP is required'); return false }
+      const withDefaults: Device = { ...draft, port: draft.port ?? 5985, connectionTimeoutMs: draft.connectionTimeoutMs ?? 2000, connectionPollSec: draft.connectionPollSec ?? 60 }
+      dispatch(updateDevice(withDefaults))
+      if (closeAfter) onClose()
+      return true
+    },
     discard: () => setDraft(device ?? null)
   }), [draft, device, dispatch, onClose])
 

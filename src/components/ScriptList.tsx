@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react'
-import { Button, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem } from '@mui/material'
+import { Button, Box, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem } from '@mui/material'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useAppDispatch, useAppSelector } from '../store/store'
 import { addScript, deleteScript } from '../store/fbcskmSlice'
@@ -64,27 +64,31 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
         <TextField label='Script path' value={scriptPath} onChange={e=>setScriptPath(e.target.value)} />
         <Button variant='contained' onClick={create}>Add</Button>
       </Stack>
-      <List dense>
-        {shownScripts.map((s, idx) => {
-          const isSelected = selectedId === s.id
-          return (
-            <ListItem key={s.id} secondaryAction={
-              <IconButton edge='end' onClick={(e)=>openMenu(e, s.id)} aria-label='actions' size='small' sx={{ color: isSelected ? '#fff' : undefined }}>
-                <MoreVertIcon />
-              </IconButton>
-            } sx={{ backgroundColor: isSelected ? '#0b3d91' : (idx % 2 === 1 ? 'rgba(11,61,145,0.08)' : 'transparent') }}>
-              <ListItemButton
-                selected={isSelected}
-                onClick={()=>{ if (onSelectScript) onSelectScript(s.id, dev.id); else onSelect(s.id) }}
-                sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
-              >
-                <ListItemText primary={s.instanceName} secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
-              </ListItemButton>
-            </ListItem>
-          )
-        })}
-        {shownScripts.length===0 && <Typography color='text.secondary'>No scripts.</Typography>}
-      </List>
+
+      {/* Limit visible scripts to 10 and make the list scrollable to avoid pushing the edit form down */}
+      <Box sx={{ maxHeight: 10 * 48, overflowY: 'auto' }}>
+        <List dense>
+          {shownScripts.map((s, idx) => {
+            const isSelected = selectedId === s.id
+            return (
+              <ListItem key={s.id} secondaryAction={
+                <IconButton edge='end' onClick={(e)=>openMenu(e, s.id)} aria-label='actions' size='small' sx={{ color: isSelected ? '#fff' : undefined }}>
+                  <MoreVertIcon />
+                </IconButton>
+              } sx={{ backgroundColor: isSelected ? '#0b3d91' : (idx % 2 === 1 ? 'rgba(11,61,145,0.08)' : 'transparent') }}>
+                <ListItemButton
+                  selected={isSelected}
+                  onClick={()=>{ if (onSelectScript) onSelectScript(s.id, dev.id); else onSelect(s.id) }}
+                  sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
+                >
+                  <ListItemText primary={s.instanceName} secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
+                </ListItemButton>
+              </ListItem>
+            )
+          })}
+          {shownScripts.length===0 && <Typography color='text.secondary'>No scripts.</Typography>}
+        </List>
+      </Box>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem onClick={()=>{ if (menuScriptId) onEdit(menuScriptId); closeMenu() }}>Edit</MenuItem>
