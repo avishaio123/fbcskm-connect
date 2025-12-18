@@ -66,6 +66,11 @@ export default function ScriptForm({ device, script, onChange }: { device: Devic
           <TextField label='Method' select fullWidth value={draft.args.method || 'GET'} onChange={e=>set('args.method', e.target.value)}>
             <MenuItem value='GET'>GET</MenuItem>
             <MenuItem value='POST'>POST</MenuItem>
+            <MenuItem value='PUT'>PUT</MenuItem>
+            <MenuItem value='PATCH'>PATCH</MenuItem>
+            <MenuItem value='DELETE'>DELETE</MenuItem>
+            <MenuItem value='HEAD'>HEAD</MenuItem>
+            <MenuItem value='OPTIONS'>OPTIONS</MenuItem>
           </TextField>
         </Grid>
         <Grid item xs={12} md={6}>

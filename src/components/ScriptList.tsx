@@ -6,9 +6,17 @@ import { useAppDispatch, useAppSelector } from '../store/store'
 import { addScript, deleteScript } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
 
-export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEdit, onSelectScript }: { deviceId?: string|null, selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string, deviceId: string)=>void, onSelectScript?: (id: string, deviceId: string)=>void }){
+export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEdit, onSelectScript, searchText, searchInScripts }: { deviceId?: string|null, selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string, deviceId: string)=>void, onSelectScript?: (id: string, deviceId: string)=>void, searchText?: string, searchInScripts?: boolean }){
   const dispatch = useAppDispatch()
   const dev = useAppSelector(s=>s.fbcskm.devices.find(d=>d.id===deviceId))
+  const q = (searchText || '').trim().toLowerCase()
+  // When searching inside scripts, only show scripts that match for the selected device
+  const shownScripts = dev ? ((q && searchInScripts) ? dev.scripts.filter(s => {
+    if ((s.instanceName || '').toLowerCase().includes(q)) return true
+    if ((s.scriptPath || '').toLowerCase().includes(q)) return true
+    if (JSON.stringify(s.args || {}).toLowerCase().includes(q)) return true
+    return false
+  }) : dev.scripts) : []
   const [instanceName, setInstanceName] = useState('NEW_Script')
   const [scriptPath, setScriptPath] = useState('/myscripts/RestMon.ps1')
 
@@ -57,18 +65,25 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
         <Button variant='contained' onClick={create}>Add</Button>
       </Stack>
       <List dense>
-        {dev.scripts.map((s, idx) => (
-          <ListItem key={s.id} secondaryAction={
-            <IconButton edge='end' onClick={(e)=>openMenu(e, s.id)} aria-label='actions'>
-              <MoreVertIcon />
-            </IconButton>
-          } sx={{ backgroundColor: idx % 2 === 1 ? 'rgba(25,118,210,0.04)' : 'transparent' }}>
-            <ListItemButton selected={selectedId===s.id} onClick={()=>{ if (onSelectScript) onSelectScript(s.id, dev.id); else onSelect(s.id) }}>
-              <ListItemText primary={s.instanceName} secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-        {dev.scripts.length===0 && <Typography color='text.secondary'>No scripts.</Typography>}
+        {shownScripts.map((s, idx) => {
+          const isSelected = selectedId === s.id
+          return (
+            <ListItem key={s.id} secondaryAction={
+              <IconButton edge='end' onClick={(e)=>openMenu(e, s.id)} aria-label='actions' size='small' sx={{ color: isSelected ? '#fff' : undefined }}>
+                <MoreVertIcon />
+              </IconButton>
+            } sx={{ backgroundColor: isSelected ? '#0b3d91' : (idx % 2 === 1 ? 'rgba(11,61,145,0.08)' : 'transparent') }}>
+              <ListItemButton
+                selected={isSelected}
+                onClick={()=>{ if (onSelectScript) onSelectScript(s.id, dev.id); else onSelect(s.id) }}
+                sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
+              >
+                <ListItemText primary={s.instanceName} secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
+              </ListItemButton>
+            </ListItem>
+          )
+        })}
+        {shownScripts.length===0 && <Typography color='text.secondary'>No scripts.</Typography>}
       </List>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>

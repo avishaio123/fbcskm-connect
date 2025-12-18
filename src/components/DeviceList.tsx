@@ -60,17 +60,24 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
         <Button variant='contained' onClick={create}>Add</Button>
       </Stack>
       <List dense>
-        {devices.map((d, idx) => (
-          <ListItem key={d.id} secondaryAction={
-            <IconButton edge='end' onClick={(e)=>openMenu(e, d.id)} aria-label='actions'>
-              <MoreVertIcon />
-            </IconButton>
-          } sx={{ backgroundColor: idx % 2 === 1 ? 'rgba(25,118,210,0.04)' : 'transparent' }}>
-            <ListItemButton selected={selectedId===d.id} onClick={()=>onSelect(d.id)}>
-              <ListItemText primary={d.name} secondary={`Scripts: ${d.scripts.length}`} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+        {devices.map((d, idx) => {
+          const isSelected = selectedId === d.id
+          return (
+            <ListItem key={d.id} secondaryAction={
+              <IconButton edge='end' onClick={(e)=>openMenu(e, d.id)} aria-label='actions' size='small' sx={{ color: isSelected ? '#fff' : undefined }}>
+                <MoreVertIcon />
+              </IconButton>
+            } sx={{ backgroundColor: isSelected ? '#0b3d91' : (idx % 2 === 1 ? 'rgba(11,61,145,0.08)' : 'transparent') }}>
+              <ListItemButton
+                selected={isSelected}
+                onClick={()=>onSelect(d.id)}
+                sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
+              >
+                <ListItemText primary={d.name} secondary={`Scripts: ${d.scripts.length}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
+              </ListItemButton>
+            </ListItem>
+          )
+        })}
         {devices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
       </List>
 

@@ -111,7 +111,7 @@ export default function App(){
       {/* One clean device list — scripts shown on selection */}
       <Stack direction='row' spacing={2}>
         <DeviceList devices={filteredDevices} selectedId={selectedDeviceId} onSelect={setSelectedDeviceId as any} onRequestEdit={(id)=>{ setSelectedDeviceId(id); setDeviceFormOpen(true) }} />
-        <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} onSelect={(id:any)=>setSelectedScriptId(id)} onRequestEdit={(scriptId, deviceId)=>{ setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }} onSelectScript={(scriptId, deviceId)=>{ setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }} />
+        <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>setSelectedScriptId(id)} onRequestEdit={(scriptId, deviceId)=>{ setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }} onSelectScript={(scriptId, deviceId)=>{ setSelectedDeviceId(deviceId); setSelectedScriptId(scriptId) }} />
       </Stack>
 
       {(() => {
