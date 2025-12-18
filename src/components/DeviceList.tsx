@@ -6,9 +6,10 @@ import { useAppDispatch, useAppSelector } from '../store/store'
 import { addDevice, deleteDevice } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
 
-export default function DeviceList({ devices: devicesProp, selectedId, onSelect, onRequestEdit }: { devices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void }){
+export default function DeviceList({ devices: devicesProp, selectedId, onSelect, onRequestEdit, onPasteScript, clipboard: clipboardProp }: { devices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void, onPasteScript?: (deviceId: string)=>void, clipboard?: any|null }){
   const dispatch = useAppDispatch()
   const devices = devicesProp ?? useAppSelector(s=>s.fbcskm.devices)
+  const clipboard = useAppSelector(s => (s.fbcskm as any).clipboard)
   const [name, setName] = useState('')
   const [forcedIp, setForcedIp] = useState('')
 
@@ -18,6 +19,8 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
 
   const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { setMenuAnchor(e.currentTarget); setMenuDeviceId(id) }
   const closeMenu = () => { setMenuAnchor(null); setMenuDeviceId(null) }
+
+  const handlePasteToDevice = (deviceId: string) => { console.log('DeviceList: paste requested to', deviceId); if (onPasteScript) onPasteScript(deviceId); closeMenu() }
 
   const create = () => {
     if (!name.trim()) return
@@ -84,6 +87,7 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem onClick={()=>{ if (menuDeviceId) onEdit(menuDeviceId); closeMenu() }}>Edit</MenuItem>
         <MenuItem onClick={()=>{ if (menuDeviceId) duplicate(menuDeviceId); closeMenu() }}>Duplicate</MenuItem>
+        <MenuItem onClick={()=>{ if (menuDeviceId) handlePasteToDevice(menuDeviceId); closeMenu() }} disabled={!((clipboardProp || clipboard) && (clipboardProp || clipboard).type === 'script')}>Paste Script</MenuItem>
         <MenuItem onClick={()=>{ if (menuDeviceId) remove(menuDeviceId); closeMenu() }} sx={{color: 'error.main'}}>Delete</MenuItem>
       </Menu>
     </Stack>

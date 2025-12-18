@@ -2,7 +2,7 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Drawer, Box, Stack, Typography, TextField, Button, Grid } from '@mui/material'
 import { Device, updateDevice } from '../store/fbcskmSlice'
-import { useAppDispatch } from '../store/store'
+import { useAppDispatch, useAppSelector } from '../store/store'
 
 interface Props { open: boolean; device?: Device | null; onClose: ()=>void }
 
@@ -17,8 +17,14 @@ export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, d
   const [draft, setDraft] = useState<Device | null>(device ?? null)
   useEffect(()=>{ setDraft(device ?? null) }, [device])
 
+  const deviceFromStore = useAppSelector(s => s.fbcskm.devices.find(x => x.id === device?.id))
+
   useImperativeHandle(ref, () => ({
-    isDirty: () => JSON.stringify(draft) !== JSON.stringify(device),
+    // compare draft to the current device in the store rather than the prop to avoid race when saving
+    isDirty: () => {
+      const compareTo = deviceFromStore ?? device
+      return JSON.stringify(draft) !== JSON.stringify(compareTo)
+    },
     // save(closeAfter=true) - when called programmatically pass false to avoid triggering onClose that will re-open the unsaved dialog
     save: (closeAfter: boolean = true) => {
       if (!draft) return false
@@ -29,7 +35,7 @@ export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, d
       return true
     },
     discard: () => setDraft(device ?? null)
-  }), [draft, device, dispatch, onClose])
+  }), [draft, deviceFromStore, device, dispatch, onClose])
 
   const set = (key: keyof Device, value: any) => { if(!draft) return; setDraft({ ...draft, [key]: value }) }
 

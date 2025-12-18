@@ -43,9 +43,11 @@ export interface Device {
 
 export interface FBCSKMState {
   devices: Device[]
+  originalLines?: string[]
+  dirty?: boolean
 }
 
-const initialState: FBCSKMState = { devices: [] }
+const initialState: FBCSKMState = { devices: [], originalLines: [], dirty: false }
 
 /**
  * Normalize smart quotes and parse CLI-like args to structured RestMonArgs.
@@ -235,41 +237,53 @@ const slice = createSlice({
   initialState,
   reducers: {
     parseFBCSKM(state, action: PayloadAction<string>) {
-      const lines = action.payload
-        .split(/\r?\n/)
-        .filter(l => l.trim().length > 0)
+      const allLines = action.payload.split(/\r?\n/)
+      // preserve original lines (including comments and blanks)
+      state.originalLines = allLines.slice()
 
       state.devices = []
-      for (const line of lines) {
+      for (let i = 0; i < allLines.length; i++) {
+        const line = allLines[i]
+        if (!line || !line.trim()) continue
+        if (line.trim().startsWith('#')) continue // comments are preserved but not parsed as devices
         const d = parseLine(line)
-        if (d) state.devices.push(d)
+        if (d) { (d as any).originalLineIndex = i; state.devices.push(d) }
       }
+      state.dirty = false
     },
     addDevice(state, action: PayloadAction<Device>) {
       state.devices.push(action.payload)
+      state.dirty = true
     },
     updateDevice(state, action: PayloadAction<Device>) {
       const i = state.devices.findIndex(d => d.id === action.payload.id)
       if (i >= 0) state.devices[i] = action.payload
+      state.dirty = true
     },
     deleteDevice(state, action: PayloadAction<string>) {
       state.devices = state.devices.filter(d => d.id !== action.payload)
+      state.dirty = true
     },
     addScript(state, action: PayloadAction<{ deviceId: string, script: ScriptInstance }>) {
       const d = state.devices.find(x => x.id === action.payload.deviceId)
       if (d) d.scripts.push(action.payload.script)
+      state.dirty = true
     },
     updateScript(state, action: PayloadAction<{ deviceId: string, script: ScriptInstance }>) {
       const d = state.devices.find(x => x.id === action.payload.deviceId)
       if (!d) return
       const i = d.scripts.findIndex(s => s.id === action.payload.script.id)
       if (i >= 0) d.scripts[i] = action.payload.script
+      state.dirty = true
     },
     deleteScript(state, action: PayloadAction<{ deviceId: string, scriptId: string }>) {
       const d = state.devices.find(x => x.id === action.payload.deviceId)
       if (!d) return
       d.scripts = d.scripts.filter(s => s.id !== action.payload.scriptId)
-    }
+      state.dirty = true
+    },
+    setDirty(state, action: PayloadAction<boolean>) { state.dirty = action.payload },
+    setClipboard(state, action: PayloadAction<any | null>) { (state as any).clipboard = action.payload }
   }
 })
 
@@ -280,7 +294,9 @@ export const {
   deleteDevice,
   addScript,
   updateScript,
-  deleteScript
+  deleteScript,
+  setDirty,
+  setClipboard
 } = slice.actions
 
 export default slice.reducer

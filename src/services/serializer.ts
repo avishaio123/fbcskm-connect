@@ -74,3 +74,38 @@ function serializeDevice(dev: Device): string {
 export function serializeDevices(devices: Device[]): string {
   return (devices ?? []).map(serializeDevice).join('\n')
 }
+
+/**
+ * Serialize devices while preserving comment/blank lines from originalLines.
+ * Devices that had originalLineIndex will be placed back in those positions.
+ * New devices (no original index) are appended at the end.
+ */
+export function serializeDevicesWithComments(devices: Device[], originalLines?: string[]): string {
+  if (!originalLines || originalLines.length === 0) {
+    return serializeDevices(devices)
+  }
+
+  const out: string[] = []
+  const deviceByIndex = new Map<number, Device>()
+  const appended: string[] = []
+
+  for (const d of devices) {
+    const idx = (d as any).originalLineIndex as number | undefined
+    if (typeof idx === 'number') deviceByIndex.set(idx, d)
+    else appended.push(serializeDevice(d))
+  }
+
+  for (let i = 0; i < originalLines.length; i++) {
+    const l = originalLines[i]
+    if (!l || !l.trim()) { out.push(''); continue }
+    if (l.trim().startsWith('#')) { out.push(l); continue }
+    const dev = deviceByIndex.get(i)
+    if (dev) out.push(serializeDevice(dev))
+    // else if device was deleted, skip this line
+  }
+
+  // append new devices at the end
+  for (const s of appended) out.push(s)
+
+  return out.join('\n')
+}

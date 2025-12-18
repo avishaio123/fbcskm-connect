@@ -6,7 +6,7 @@ import { useAppDispatch, useAppSelector } from '../store/store'
 import { addScript, deleteScript } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
 
-export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEdit, onSelectScript, searchText, searchInScripts }: { deviceId?: string|null, selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string, deviceId: string)=>void, onSelectScript?: (id: string, deviceId: string)=>void, searchText?: string, searchInScripts?: boolean }){
+export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEdit, onSelectScript, searchText, searchInScripts, onCopyScript, onCutScript }: { deviceId?: string|null, selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string, deviceId: string)=>void, onSelectScript?: (id: string, deviceId: string)=>void, searchText?: string, searchInScripts?: boolean, onCopyScript?: (id:string, deviceId:string)=>void, onCutScript?: (id:string, deviceId:string)=>void }){
   const dispatch = useAppDispatch()
   const dev = useAppSelector(s=>s.fbcskm.devices.find(d=>d.id===deviceId))
   const q = (searchText || '').trim().toLowerCase()
@@ -93,6 +93,8 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem onClick={()=>{ if (menuScriptId) onEdit(menuScriptId); closeMenu() }}>Edit</MenuItem>
         <MenuItem onClick={()=>{ if (menuScriptId) duplicate(menuScriptId); closeMenu() }}>Duplicate</MenuItem>
+        <MenuItem onClick={()=>{ if (menuScriptId && onCopyScript && deviceId) onCopyScript(menuScriptId, deviceId); closeMenu() }}>Copy</MenuItem>
+        <MenuItem onClick={()=>{ if (menuScriptId && onCutScript && deviceId) onCutScript(menuScriptId, deviceId); closeMenu() }}>Cut</MenuItem>
         <MenuItem onClick={()=>{ if (menuScriptId) remove(menuScriptId); closeMenu() }} sx={{color: 'error.main'}}>Delete</MenuItem>
       </Menu>
     </Stack>

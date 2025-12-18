@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react'
-import { Box, Button, Stack, Typography, TextField, FormControlLabel, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton } from '@mui/material'
+import { Box, Button, Stack, Typography, TextField, FormControlLabel, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton, Snackbar } from '@mui/material'
 import Viewer from './Viewer'
 import DeviceList from '../components/DeviceList'
 import ScriptList from '../components/ScriptList'
@@ -21,6 +21,11 @@ declare global {
 }
 
 import ErrorBoundary from '../components/ErrorBoundary'
+
+// Logos
+import BMCHelixLogo from '../../logo/BMCHelix Logo Medium Transparent.png'
+import MatrixLogo from '../../logo/Matrix-Logo-Flat.png'
+import MatrixKBLogo from '../../logo/MatrixKB for BMC Helix.png'
 
 export default function App(){
   // Global error logging to help capture runtime issues in dev
@@ -49,9 +54,21 @@ export default function App(){
 
   const devices = useAppSelector(s=>s.fbcskm.devices)
 
+const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
+  const loadPendingPathRef = React.useRef<string | null>(null)
+
   const openFile = async () => {
-    const p = await window.electronAPI.openFile()
-    if (!p) return
+    const p = await window.electronAPI.openFile()
+    if (!p) return
+
+    // If there are unsaved changes, prompt first
+    const state = (await import('../store/store')).store.getState()
+    if (state.fbcskm.dirty) {
+      loadPendingPathRef.current = p
+      setLoadUnsavedOpen(true)
+      return
+    }
+
     const txt = await window.electronAPI.readFile(p)
     setFilePath(p)
     setRaw(txt)
@@ -72,11 +89,75 @@ export default function App(){
     })
   }, [devices, searchText, searchInScripts])
 
+  // Counts to show under search box
+  const devicesCount = filteredDevices.length
+  const scriptsCount = filteredDevices.reduce((acc, d) => {
+    const q = (searchText || '').trim().toLowerCase()
+    if (!q || !searchInScripts) return acc + (d.scripts?.length || 0)
+    const matching = (d.scripts || []).filter(s => {
+      if ((s.instanceName || '').toLowerCase().includes(q)) return true
+      if ((s.scriptPath || '').toLowerCase().includes(q)) return true
+      if (JSON.stringify(s.args || {}).toLowerCase().includes(q)) return true
+      return false
+    }).length
+    return acc + matching
+  }, 0)
+
   // Refs to forms to check dirty state and call save/discard programmatically
   const scriptFormRef = React.useRef<any>(null)
   const deviceFormRef = React.useRef<any>(null)
   const dirtyFormTypeRef = React.useRef<'script'|'device'|null>(null)
 
+  // clipboard for script copy/cut
+  const [clipboard, setClipboardLocal] = useState<any | null>(null)
+  const setClipboard = (cb: any | null) => { setClipboardLocal(cb); (async ()=>{ try { const { setClipboard } = await import('../store/fbcskmSlice'); const { store } = await import('../store/store'); store.dispatch(setClipboard(cb)); console.log('store clipboard set', cb) } catch (err) { console.error('setClipboard dispatch failed', err) } })() }
+
+  const [clipMsg, setClipMsg] = useState<string|null>(null)
+
+  const onCopyScript = (scriptId: string, deviceId: string) => {
+    const d = devices.find(x => x.id === deviceId)
+    if (!d) return
+    const s = d.scripts.find(x => x.id === scriptId)
+    if (!s) return
+    setClipboard({ type: 'script', script: s, fromDeviceId: deviceId, cut: false })
+    setClipMsg('Copied script to clipboard')
+  }
+
+  const onCutScript = (scriptId: string, deviceId: string) => {
+    const d = devices.find(x => x.id === deviceId)
+    if (!d) return
+    const s = d.scripts.find(x => x.id === scriptId)
+    if (!s) return
+    setClipboard({ type: 'script', script: s, fromDeviceId: deviceId, cut: true })
+    setClipMsg('Cut script to clipboard')
+  }
+
+  const onPasteScriptToDevice = async (targetDeviceId: string) => {
+    if (!clipboard || clipboard.type !== 'script') { setClipMsg('Nothing to paste'); return }
+    console.log('Pasting script to', targetDeviceId, 'clipboard:', clipboard)
+
+    try {
+      const { v4: uuidv4 } = (await import('uuid')) as any
+      const newScript = { ...clipboard.script, id: uuidv4() }
+      const sliceMod = await import('../store/fbcskmSlice')
+      const storeMod = await import('../store/store')
+      const addScript = sliceMod.addScript
+      const deleteScript = sliceMod.deleteScript
+      const store = storeMod.store
+
+      store.dispatch(addScript({ deviceId: targetDeviceId, script: newScript }))
+      // if it was a cut, delete original only after successful paste
+      if (clipboard.cut && clipboard.fromDeviceId && clipboard.script?.id) {
+        store.dispatch(deleteScript({ deviceId: clipboard.fromDeviceId, scriptId: clipboard.script.id }))
+      }
+      // clear clipboard only if this was a cut; copies are preserved to allow multiple pastes
+      if (clipboard.cut) setClipboard(null)
+      setClipMsg('Pasted script')
+    } catch (err) {
+      console.error('Paste failed', err)
+      setClipMsg('Paste failed')
+    }
+  }
   const requestSelectDevice = (id: string|null) => {
     // If switching to same device, allow
     if (id === selectedDeviceId) { setSelectedDeviceId(id); return }
@@ -183,10 +264,21 @@ export default function App(){
   return (
     <ErrorBoundary>
     <Stack spacing={2} sx={{py: 3}}>
-      <Typography variant='h4'>FBCSKM Manager (CRUD, restmon only)</Typography>
+      <Box sx={{display:'flex', flexDirection:'column', gap:1, alignItems:'stretch', width: '100%'}}>
+        <Box sx={{width: '100%', display: 'flex', justifyContent: 'flex-start'}}>
+          <img src={MatrixKBLogo} alt="MatrixKB for BMC Helix" style={{height:56}} />
+        </Box>
+        <Box sx={{display:'flex', alignItems:'center', justifyContent:'space-between', width: '100%'}}>
+          <Typography variant='h4'>PATROL Scripting KM File Based Configuraiton Editor</Typography>
+          <Box sx={{display:'flex', gap:2, alignItems:'center'}}>
+            <img src={MatrixLogo} alt="Matrix" style={{height:30}} />
+            <img src={BMCHelixLogo} alt="BMCHelix" style={{height:34, background: 'transparent'}} />
+          </Box>
+        </Box>
+      </Box>
 
       <Box>
-        <Button variant='contained' onClick={openFile}>Open FBCSKM file</Button>
+        <Button variant='contained' onClick={openFile}>Load Configuration File</Button>
         {filePath && <Typography sx={{ml:2}} component='span'>{filePath}</Typography>}
       </Box>
 
@@ -195,9 +287,12 @@ export default function App(){
           if(!filePath) return
           const { store } = await import('../store/store')
           const { serializeDevices } = await import('../services/serializer')
-          const text = serializeDevices(store.getState().fbcskm.devices)
+          const text = serializeDevicesWithComments(store.getState().fbcskm.devices, store.getState().fbcskm.originalLines)
           await window.electronAPI.rotateBackups(filePath)
           await window.electronAPI.writeFile(filePath, text)
+          // mark as saved
+          const { setDirty } = await import('../store/fbcskmSlice')
+          store.dispatch(setDirty(false))
           alert('Saved with backup rotation (30 generations).')
         }}>Save in place</Button>
         <Button variant='outlined' onClick={async ()=>{
@@ -205,14 +300,20 @@ export default function App(){
           const saveTo = await window.electronAPI.saveFile(suggested)
           if(!saveTo) return
           const { store } = await import('../store/store')
-          const { serializeDevices } = await import('../services/serializer')
-          const text = serializeDevices(store.getState().fbcskm.devices)
+          const { serializeDevicesWithComments } = await import('../services/serializer')
+          const text = serializeDevicesWithComments(store.getState().fbcskm.devices, store.getState().fbcskm.originalLines)
           await window.electronAPI.writeFile(saveTo, text)
+          // mark as saved
+          const { setDirty } = await import('../store/fbcskmSlice')
+          store.dispatch(setDirty(false))
           alert('Exported file saved.')
         }}>Export as...</Button>
       </Stack>
 
-      <Viewer raw={raw} onRawChange={setRaw} />
+      <Viewer raw={raw} onRawChange={(t:string)=>{ setRaw(t); /* mark dirty when raw edited */ (async ()=>{ const { setDirty } = await import('../store/fbcskmSlice'); const { store } = await import('../store/store'); store.dispatch(setDirty(true)) })() }} />
+
+      {/* Show unsaved indicator when configuration is dirty */}
+      { (useAppSelector(s=>s.fbcskm.dirty)) && <Typography color='error' sx={{ml:1}}>Unsaved Changes</Typography> }
 
       {/* Search area */}
       <Stack direction='row' spacing={1} alignItems='center'>
@@ -236,10 +337,13 @@ export default function App(){
         <Button variant='contained' onClick={()=>{ /* explicit search button — filtering is live */ }}>Search</Button>
       </Stack>
 
+      {/* Search results counts */}
+      <Typography variant='body2' color='text.secondary'>Devices found: <strong>{devicesCount}</strong> • Scripts: <strong>{scriptsCount}</strong></Typography>
+
       {/* One clean device list — scripts shown on selection */}
       <Stack direction='row' spacing={2}>
-        <DeviceList devices={filteredDevices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} />
-        <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>requestSelectScript(id, selectedDeviceId)} onRequestEdit={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId); }} onSelectScript={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId) }} />
+        <DeviceList devices={filteredDevices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} />
+        <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>requestSelectScript(id, selectedDeviceId)} onRequestEdit={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId); }} onSelectScript={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId) }} onCopyScript={onCopyScript} onCutScript={onCutScript} />
       </Stack>
 
       {(() => {
@@ -264,6 +368,66 @@ export default function App(){
           <Button variant='contained' onClick={handleUnsavedSave}>Save Changes</Button>
         </DialogActions>
       </Dialog>
+{/* Load unsaved changes confirmation dialog for file open */}
+      <Dialog open={loadUnsavedOpen} onClose={()=>setLoadUnsavedOpen(false)}>
+        <DialogTitle>Unsaved changes</DialogTitle>
+        <DialogContent>
+          <Typography>You have unsaved changes. What would you like to do before loading a new file?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{ setLoadUnsavedOpen(false); loadPendingPathRef.current = null }}>Cancel</Button>
+          <Button color='error' onClick={async ()=>{
+            // Discard changes and load
+            setLoadUnsavedOpen(false)
+            const p = loadPendingPathRef.current
+            loadPendingPathRef.current = null
+            if (!p) return
+            const txt = await window.electronAPI.readFile(p)
+            setFilePath(p)
+            setRaw(txt)
+          }}>Discard Changes</Button>
+          <Button onClick={async ()=>{
+            // Save in place
+            const p = loadPendingPathRef.current
+            if (!p) return
+            const { store } = await import('../store/store')
+            const { serializeDevicesWithComments } = await import('../services/serializer')
+            const text = serializeDevicesWithComments(store.getState().fbcskm.devices, store.getState().fbcskm.originalLines)
+            await window.electronAPI.rotateBackups(p)
+            await window.electronAPI.writeFile(p, text)
+            const { setDirty } = await import('../store/fbcskmSlice')
+            store.dispatch(setDirty(false))
+            setLoadUnsavedOpen(false)
+            const txt = await window.electronAPI.readFile(p)
+            setFilePath(p)
+            setRaw(txt)
+            loadPendingPathRef.current = null
+          }}>Save in place</Button>
+          <Button variant='contained' onClick={async ()=>{
+            // Export (save as) then load
+            const p = loadPendingPathRef.current
+            if (!p) return
+            const suggested = filePath || 'config.txt'
+            const saveTo = await window.electronAPI.saveFile(suggested)
+            if(!saveTo) return
+            const { store } = await import('../store/store')
+            const { serializeDevicesWithComments } = await import('../services/serializer')
+            const text = serializeDevicesWithComments(store.getState().fbcskm.devices, store.getState().fbcskm.originalLines)
+            await window.electronAPI.writeFile(saveTo, text)
+            const { setDirty } = await import('../store/fbcskmSlice')
+            store.dispatch(setDirty(false))
+            setLoadUnsavedOpen(false)
+            const txt = await window.electronAPI.readFile(p)
+            setFilePath(p)
+            setRaw(txt)
+            loadPendingPathRef.current = null
+          }}>Export</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snack for clipboard actions */}
+      <Snackbar open={Boolean(clipMsg)} autoHideDuration={2000} onClose={()=>setClipMsg(null)} message={clipMsg || ''} />
+
     </Stack>
     </ErrorBoundary>
   )
