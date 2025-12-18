@@ -1,5 +1,5 @@
 
-# FBCSKM Manager (Electron + React) – v2.3.1
+# Scripting KM for RestMon Manager (FBCSKM) - (React) – v2.4
 
 - Parse long FBCSKM lines → Device → Scripts
 - CRUD: Create/Delete Devices & Scripts; Update scripts via Wizard
