@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Button, Grid, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { Device, ScriptInstance, updateScript } from '../store/fbcskmSlice'
 import { useAppDispatch } from '../store/store'
@@ -7,6 +7,11 @@ import { useAppDispatch } from '../store/store'
 export default function ScriptForm({ device, script, onChange }: { device: Device, script: ScriptInstance, onChange: (s: ScriptInstance)=>void }){
   const dispatch = useAppDispatch()
   const [draft, setDraft] = useState<ScriptInstance>(script)
+
+  // Keep local draft in sync when the parent selects a different script
+  useEffect(() => {
+    setDraft(script)
+  }, [script])
 
   const set = (path: string, value: any) => {
     setDraft(prev => {
