@@ -76,6 +76,7 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
     if (a.matchRegex) parts.push(`-matchRegex '${a.matchRegex}'`)
     if (a.username) parts.push(`-username '${a.username}'`)
     if (a.password) parts.push(`-password '${a.password}'`)
+    if (a.headers) parts.push(`-headers '${a.headers}'`)
     if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
     let cmd = parts.join(' ')
     cmd = cmd.replace(/\|/g, '<BMC_SEP>').replace(/\*/g, '<BMC_STAR>')

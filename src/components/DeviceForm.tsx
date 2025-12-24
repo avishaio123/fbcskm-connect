@@ -15,29 +15,26 @@ export type DeviceFormHandle = {
 export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, device, onClose }, ref){
   const dispatch = useAppDispatch()
   const [draft, setDraft] = useState<Device | null>(device ?? null)
-  useEffect(()=>{ setDraft(device ?? null) }, [device])
-
-  const deviceFromStore = useAppSelector(s => s.fbcskm.devices.find(x => x.id === device?.id))
+  const [shouldClose, setShouldClose] = useState(false)
+  useEffect(() => { setDraft(device); if (shouldClose) { setShouldClose(false); onClose() } }, [device])
 
   useImperativeHandle(ref, () => ({
     // compare draft to the current device in the store rather than the prop to avoid race when saving
-    isDirty: () => {
-      const compareTo = deviceFromStore ?? device
-      return JSON.stringify(draft) !== JSON.stringify(compareTo)
-    },
+    isDirty: () => JSON.stringify(draft) !== JSON.stringify(device),
     // save(closeAfter=true) - when called programmatically pass false to avoid triggering onClose that will re-open the unsaved dialog
     save: (closeAfter: boolean = true) => {
       if (!draft) return false
       if (!draft.name || !draft.name.trim()) { alert('Device Name/IP is required'); return false }
       const withDefaults: Device = { ...draft, port: draft.port ?? 5985, connectionTimeoutMs: draft.connectionTimeoutMs ?? 2000, connectionPollSec: draft.connectionPollSec ?? 60 }
+      setDraft(withDefaults)
       dispatch(updateDevice(withDefaults))
       draft.dirty = true
       draft.scripts.forEach(s => s.dirty = false)
-      if (closeAfter) onClose()
+      if (closeAfter) setShouldClose(true)
       return true
     },
     discard: () => setDraft(device ?? null)
-  }), [draft, deviceFromStore, device, dispatch, onClose])
+  }), [draft, device, dispatch, onClose])
 
   const set = (key: keyof Device, value: any) => { if(!draft) return; setDraft({ ...draft, [key]: value }) }
 
@@ -50,7 +47,11 @@ export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, d
       connectionTimeoutMs: draft.connectionTimeoutMs ?? 2000,
       connectionPollSec: draft.connectionPollSec ?? 60
     }
-    dispatch(updateDevice(withDefaults)); onClose()
+    setDraft(withDefaults)
+    draft.dirty = true
+    draft.scripts.forEach(s => s.dirty = false)
+    dispatch(updateDevice(withDefaults))
+    setShouldClose(true)
   }
   return (
     <Drawer anchor='right' open={open} onClose={onClose}>

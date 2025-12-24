@@ -14,6 +14,7 @@ export interface RestMonArgs {
   password?: string
   decryptPass?: 'TRUE' | 'FALSE'
   encryptPass?: 'TRUE' | 'FALSE'
+  headers?: string
 }
 
 export interface ScriptInstance {
@@ -144,6 +145,9 @@ function parseArgsToStruct(argstr: string): RestMonArgs {
       case 'encryptpass':
         args.encryptPass = val.toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE'
         break
+      case 'headers':
+        args.headers = val
+        break
     }
   }
 
@@ -253,6 +257,7 @@ function serializeDevice(dev: Device): string {
     if (a.password) parts.push(`-password ${singleQuote(a.password)}`)
     if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
     if (a.encryptPass) parts.push(`-encryptPass ${a.encryptPass}`)
+    if (a.headers) parts.push(`-headers ${singleQuote(a.headers)}`)
 
     let cmd = ` ${parts.join(' ')} `
     // Encode reserved separators in args payload

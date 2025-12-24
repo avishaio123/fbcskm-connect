@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Box, Button, Grid, MenuItem, Stack, TextField, Typography, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Checkbox, FormControlLabel } from '@mui/material'
+import { Box, Button, Grid, MenuItem, Stack, TextField, Typography, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Checkbox, FormControlLabel, Tooltip } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { Device, ScriptInstance, updateScript } from '../store/fbcskmSlice'
 import { useAppDispatch } from '../store/store'
@@ -17,6 +17,9 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
   const [draft, setDraft] = useState<ScriptInstance>(script)
   const [dryRunOpen, setDryRunOpen] = useState(false)
   const [dryRunResults, setDryRunResults] = useState<{ command: string, results: string } | null>(null)
+  const [headersError, setHeadersError] = useState(false)
+
+  const validateHeaders = (value: string) => !value || (value.trim().startsWith('@{') && value.trim().endsWith('}'))
 
   // Keep local draft in sync when the parent selects a different script
   useEffect(() => {
@@ -57,6 +60,7 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
     if (a.matchRegex) parts.push(`-matchRegex '${a.matchRegex}'`)
     if (a.username) parts.push(`-username '${a.username}'`)
     if (a.password) parts.push(`-password '${a.password}'`)
+    if (a.headers) parts.push(`-headers '${a.headers}'`)
     if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
     let cmd = ' ' + parts.join(' ') + ' '
     cmd = cmd.replace(/\|/g, '<BMC_SEP>').replace(/\*/g, '<BMC_STAR>')
@@ -104,6 +108,18 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
             </Grid>
             <Grid item xs={12}>
               <TextField label='Payload (POST only)' fullWidth value={draft.args.payload || ''} onChange={e => set('args.payload', e.target.value)} />
+            </Grid>
+            <Grid item xs={12}>
+              <Tooltip title='Example: @{"Content-Type" = "application/json"; "Authorization" = "token"}'>
+                <TextField
+                  label='Headers'
+                  fullWidth
+                  value={draft.args.headers || ''}
+                  onChange={e => { set('args.headers', e.target.value); setHeadersError(!validateHeaders(e.target.value)) }}
+                  error={headersError}
+                  helperText={headersError ? 'Invalid format. Must be a PowerShell hashtable like @{"key"="value"}' : ''}
+                />
+              </Tooltip>
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField label='Regex Match' fullWidth value={draft.args.matchRegex || ''} onChange={e => set('args.matchRegex', e.target.value.replace(/[‘’“”]/g, "'"))} />

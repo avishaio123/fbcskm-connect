@@ -37,6 +37,7 @@ function structToArgString(args: any): string {
   if (args.password) parts.push(`-password ${singleQuote(args.password)}`)
   if (args.decryptPass) parts.push(`-decryptPass ${args.decryptPass}`)
   if (args.encryptPass) parts.push(`-encryptPass ${args.encryptPass}`)
+  if (args.headers) parts.push(`-headers ${singleQuote(args.headers)}`)
 
   let s = parts.join(' ')
   s = encodeSpecials(s)

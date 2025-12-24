@@ -24,6 +24,7 @@ declare global {
 import ErrorBoundary from '../components/ErrorBoundary'
 import SettingsDialog from '../components/SettingsDialog'
 import SettingsIcon from '@mui/icons-material/Settings'
+import GetAppIcon from '@mui/icons-material/GetApp'
 
 // Logos
 import BMCHelixLogo from '../../logo/BMCHelix Logo Medium Transparent.png'
@@ -281,7 +282,8 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
           <Typography variant='h4'>PATROL Scripting KM File Based Configuraiton Editor</Typography>
           <Box sx={{display:'flex', gap:2, alignItems:'center'}}>
             <IconButton size='small' aria-label='settings' onClick={()=>setSettingsOpen(true)}><SettingsIcon /></IconButton>
-            <Button size='small' variant='outlined' onClick={()=>{ window.open(window.location.href, '_blank') }}>Open in Electron</Button>
+            <IconButton size='small' onClick={() => window.open('https://github.com/electron/electron/releases/latest', '_blank')} title="Download Electron"><GetAppIcon /></IconButton>
+            <Button size='small' variant='outlined' onClick={async ()=>{ if (window.electronAPI?.openInElectron) { await window.electronAPI.openInElectron() } }}>Open in Electron</Button>
             <img src={MatrixLogo} alt="Matrix" style={{height:30}} />
             <img src={BMCHelixLogo} alt="BMCHelix" style={{height:34, background: 'transparent'}} />
           </Box>
@@ -292,8 +294,9 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
         <Button variant='contained' onClick={openFile}>Load Configuration File</Button>
         <Button variant='outlined' onClick={async ()=>{
           if(!filePath) return
+          if (!window.electronAPI) { alert('Save not available in browser mode. Use Save As.'); return }
           const { store } = await import('../store/store')
-          const { serializeDevices } = await import('../services/serializer')
+          const { serializeDevicesWithComments } = await import('../services/serializer')
           const text = serializeDevicesWithComments(store.getState().fbcskm.devices, store.getState().fbcskm.originalLines)
           await window.electronAPI.rotateBackups(filePath)
           await window.electronAPI.writeFile(filePath, text)
