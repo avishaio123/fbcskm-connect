@@ -1,12 +1,13 @@
 
 import React, { useState } from 'react'
-import { Button, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem } from '@mui/material'
+import { Button, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem, Box } from '@mui/material'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
+import EditIcon from '@mui/icons-material/Edit'
 import { useAppDispatch, useAppSelector } from '../store/store'
-import { addDevice, deleteDevice } from '../store/fbcskmSlice'
+import { addDevice, deleteDevice, enableDevice, disableDevice } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
 
-export default function DeviceList({ devices: devicesProp, selectedId, onSelect, onRequestEdit, onPasteScript, clipboard: clipboardProp }: { devices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void, onPasteScript?: (deviceId: string)=>void, clipboard?: any|null }){
+export default function DeviceList({ devices: devicesProp, selectedId, onSelect, onRequestEdit, onPasteScript, clipboard: clipboardProp, showDisabled, onToggleShowDisabled }: { devices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void, onPasteScript?: (deviceId: string)=>void, clipboard?: any|null, showDisabled?: boolean, onToggleShowDisabled?: () => void }){
   const dispatch = useAppDispatch()
   const devices = devicesProp ?? useAppSelector(s=>s.fbcskm.devices)
   const clipboard = useAppSelector(s => (s.fbcskm as any).clipboard)
@@ -16,6 +17,7 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
   // menu state
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [menuDeviceId, setMenuDeviceId] = useState<string | null>(null)
+  const [globalMenuAnchor, setGlobalMenuAnchor] = useState<HTMLElement | null>(null)
 
   const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { setMenuAnchor(e.currentTarget); setMenuDeviceId(id) }
   const closeMenu = () => { setMenuAnchor(null); setMenuDeviceId(null) }
@@ -26,6 +28,8 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
 
   const create = () => {
     if (!name.trim()) return
+    // prevent duplicates by name
+    if ((devices || []).some(d => (d.name || '').toLowerCase() === name.trim().toLowerCase())) { alert('Device already exists. Use search to find and edit the device.'); return }
     const base = {
       ...(defaults || {}),
       id: uuid(),
@@ -65,14 +69,21 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
 
   return (
     <Stack spacing={2} sx={{minWidth: 360}}>
-      <Typography variant='h6'>Devices</Typography>
+      <Stack direction='row' alignItems='center' spacing={1}>
+        <Typography variant='h6'>Devices</Typography>
+        <IconButton size='small' onClick={(e) => setGlobalMenuAnchor(e.currentTarget)} aria-label='device options'>
+          <MoreVertIcon />
+        </IconButton>
+      </Stack>
       <Stack direction='row' spacing={1}>
         <TextField label='Device name' value={name} onChange={e=>setName(e.target.value)} />
         <TextField label='Forced IP (optional)' value={forcedIp} onChange={e=>setForcedIp(e.target.value)} />
         <Button variant='contained' onClick={create}>Add</Button>
       </Stack>
-      <List dense>
-        {devices.map((d, idx) => {
+      {/* limit visible devices to 10 and make list scrollable */}
+      <div style={{ maxHeight: 10 * 48, overflowY: 'auto' }}>
+        <List dense>
+          {devices.map((d, idx) => {
           const isSelected = selectedId === d.id
           return (
             <ListItem key={d.id} secondaryAction={
@@ -85,19 +96,40 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
                 onClick={()=>onSelect(d.id)}
                 sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
               >
-                <ListItemText primary={d.name} secondary={`Scripts: ${d.scripts.length}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
+                <ListItemText primary={
+                  <Box sx={{display:'flex', alignItems:'center'}}>
+                    {d.dirty && <EditIcon sx={{mr:1, fontSize:16, color: '#4a148c'}} />}
+                    {d.disabled && d.originalLine ? (d.originalLine.length > 50 ? d.originalLine.substring(0,50) + '...' : d.originalLine) : d.name}
+                  </Box>
+                } secondary={`Scripts: ${d.scripts.length}`}
+                  sx={{
+                    '& .MuiListItemText-primary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') },
+                    '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') }
+                  }}
+                />
               </ListItemButton>
             </ListItem>
           )
         })}
-        {devices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
-      </List>
+          {devices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
+        </List>
+      </div>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem onClick={()=>{ if (menuDeviceId) onEdit(menuDeviceId); closeMenu() }}>Edit</MenuItem>
         <MenuItem onClick={()=>{ if (menuDeviceId) duplicate(menuDeviceId); closeMenu() }}>Duplicate</MenuItem>
         <MenuItem onClick={()=>{ if (menuDeviceId) handlePasteToDevice(menuDeviceId); closeMenu() }} disabled={!((clipboardProp || clipboard) && (clipboardProp || clipboard).type === 'script')}>Paste Script</MenuItem>
+        {/* Enable / Disable device (comment/uncomment) */}
+        <MenuItem onClick={()=>{ if (menuDeviceId) { const d = devices.find(x=>x.id===menuDeviceId); if (d) { if (d.disabled) dispatch(enableDevice(menuDeviceId)); else dispatch(disableDevice(menuDeviceId)) } } closeMenu() }}>
+          { menuDeviceId && ((devices.find(x=>x.id===menuDeviceId) || {}).disabled) ? 'Enable Device' : 'Disable Device' }
+        </MenuItem>
         <MenuItem onClick={()=>{ if (menuDeviceId) remove(menuDeviceId); closeMenu() }} sx={{color: 'error.main'}}>Delete</MenuItem>
+      </Menu>
+
+      <Menu anchorEl={globalMenuAnchor} open={Boolean(globalMenuAnchor)} onClose={() => setGlobalMenuAnchor(null)}>
+        <MenuItem onClick={() => { if (onToggleShowDisabled) onToggleShowDisabled(); setGlobalMenuAnchor(null) }}>
+          {showDisabled ? 'Hide Disabled Devices and Remarks' : 'Show Disabled Devices and Remarks'}
+        </MenuItem>
       </Menu>
     </Stack>
   )

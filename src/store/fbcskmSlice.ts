@@ -20,16 +20,21 @@ export interface ScriptInstance {
   id: string
   instanceName: string
   scriptPath: string
-  args: RestMonArgs
+  args: any // RestMonArgs for Restmon scripts, string for generic
   pollIntervalSec?: number
   timeoutSec?: number
   regexField?: string
+  isRestmon?: boolean
+  dirty?: boolean
 }
 
 export interface Device {
   id: string
   name: string
   forcedIp?: string
+  disabled?: boolean
+  // original line index when parsed from a file (used to preserve comments/positions)
+  originalLineIndex?: number
   port?: number | null
   connectionTimeoutMs?: number | null
   connectionPollSec?: number | null
@@ -39,11 +44,14 @@ export interface Device {
   privateKeyPath?: string
   passphrase?: string
   scripts: ScriptInstance[]
+  dirty?: boolean
+  originalLine?: string
 }
 
 export interface DefaultScriptSettings {
   matrixKBPath: string
   genericPath: string
+  isRestmonDefault: boolean
 }
 
 export interface FBCSKMState {
@@ -70,7 +78,8 @@ const initialState: FBCSKMState = {
   },
   defaultScriptSettings: {
     matrixKBPath: 'c:/MatrixKB/Scripts/Restmon',
-    genericPath: 'c:/MatrixKB/Scripts'
+    genericPath: 'c:/MatrixKB/Scripts',
+    isRestmonDefault: true
   }
  }
 
@@ -187,15 +196,17 @@ function parseLine(line: string) {
     const regex = parts.length >= 6 ? parts[5] : undefined
 
     const args = parseArgsToStruct(argstr)
+    const isRestmon = argstr.includes('-') // Simple check: if has -, it's Restmon
 
     dev.scripts.push({
       id: uuid(),
       instanceName,
       scriptPath,
-      args,
+      args: isRestmon ? args : argstr, // For Restmon, parsed object; else, raw string
       pollIntervalSec: poll,
       timeoutSec: tout,
-      regexField: regex
+      regexField: regex,
+      isRestmon
     })
   }
 
@@ -270,9 +281,23 @@ const slice = createSlice({
       for (let i = 0; i < allLines.length; i++) {
         const line = allLines[i]
         if (!line || !line.trim()) continue
-        if (line.trim().startsWith('#')) continue // comments are preserved but not parsed as devices
+
+        // If the line is commented out but looks like a device definition, parse it
+        if (line.trim().startsWith('#')) {
+          const uncomment = line.replace(/^\s*#\s*/, '')
+          if (uncomment.includes('|')) { // Only if it has |, meaning device|scripts structure
+            try {
+              const d = parseLine(uncomment)
+              if (d) { (d as any).originalLineIndex = i; d.disabled = true; d.originalLine = line; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
+              continue
+            } catch (e) {
+              // not a device line, leave as comment
+              continue
+            }
+          }
+        }
         const d = parseLine(line)
-        if (d) { (d as any).originalLineIndex = i; state.devices.push(d) }
+        if (d && line.includes('|')) { (d as any).originalLineIndex = i; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
       }
       state.dirty = false
     },
@@ -282,7 +307,7 @@ const slice = createSlice({
     },
     updateDevice(state, action: PayloadAction<Device>) {
       const i = state.devices.findIndex(d => d.id === action.payload.id)
-      if (i >= 0) state.devices[i] = action.payload
+      if (i >= 0) { state.devices[i] = { ...action.payload, dirty: true }; state.devices[i].scripts.forEach(s => s.dirty = false) } // assume scripts not changed
       state.dirty = true
     },
     deleteDevice(state, action: PayloadAction<string>) {
@@ -298,7 +323,28 @@ const slice = createSlice({
       const d = state.devices.find(x => x.id === action.payload.deviceId)
       if (!d) return
       const i = d.scripts.findIndex(s => s.id === action.payload.script.id)
-      if (i >= 0) d.scripts[i] = action.payload.script
+      if (i >= 0) d.scripts[i] = { ...action.payload.script, dirty: true }
+      state.dirty = true
+    },
+    enableDevice(state, action: PayloadAction<string>) {
+      const d = state.devices.find(x => x.id === action.payload)
+      if (!d) return
+      d.disabled = false
+      const idx = (d as any).originalLineIndex as number | undefined
+      if (typeof idx === 'number' && state.originalLines && state.originalLines[idx]) {
+        state.originalLines[idx] = state.originalLines[idx].replace(/^\s*#\s*/, '')
+      }
+      state.dirty = true
+    },
+    disableDevice(state, action: PayloadAction<string>) {
+      const d = state.devices.find(x => x.id === action.payload)
+      if (!d) return
+      d.disabled = true
+      const idx = (d as any).originalLineIndex as number | undefined
+      if (typeof idx === 'number' && state.originalLines) {
+        const line = state.originalLines[idx] ?? ''
+        if (!line.trim().startsWith('#')) state.originalLines[idx] = `# ${line}`
+      }
       state.dirty = true
     },
     deleteScript(state, action: PayloadAction<{ deviceId: string, scriptId: string }>) {
@@ -307,7 +353,12 @@ const slice = createSlice({
       d.scripts = d.scripts.filter(s => s.id !== action.payload.scriptId)
       state.dirty = true
     },
-    setDirty(state, action: PayloadAction<boolean>) { state.dirty = action.payload },
+    setDirty(state, action: PayloadAction<boolean>) { 
+      state.dirty = action.payload 
+      if (!action.payload) {
+        state.devices.forEach(d => { d.dirty = false; d.scripts.forEach(s => s.dirty = false) })
+      }
+    },
     setClipboard(state, action: PayloadAction<any | null>) { (state as any).clipboard = action.payload },
     setDefaultDeviceSettings(state, action: PayloadAction<Partial<Omit<Device, 'id' | 'name' | 'forcedIp' | 'scripts'>>>) {
       state.defaultDeviceSettings = { ...(state.defaultDeviceSettings || {}), ...action.payload }
@@ -326,6 +377,8 @@ export const {
   addScript,
   updateScript,
   deleteScript,
+  enableDevice,
+  disableDevice,
   setDirty,
   setClipboard,
   setDefaultDeviceSettings,

@@ -16,6 +16,7 @@ declare global {
       readFile: (filePath: string) => Promise<string>
       writeFile: (filePath: string, content: string) => Promise<boolean>
       rotateBackups: (filePath: string) => Promise<boolean>
+      openInElectron?: () => Promise<void>
     }
   }
 }
@@ -45,6 +46,7 @@ export default function App(){
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null)
   const [deviceFormOpen, setDeviceFormOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [showDisabled, setShowDisabled] = useState(false)
 
   // Unsaved changes dialog state
   const [unsavedOpen, setUnsavedOpen] = useState(false)
@@ -92,9 +94,13 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
     })
   }, [devices, searchText, searchInScripts])
 
+  const displayDevices = useMemo(() => {
+    return filteredDevices.filter(d => showDisabled || !d.disabled)
+  }, [filteredDevices, showDisabled])
+
   // Counts to show under search box
-  const devicesCount = filteredDevices.length
-  const scriptsCount = filteredDevices.reduce((acc, d) => {
+  const devicesCount = displayDevices.length
+  const scriptsCount = displayDevices.reduce((acc, d) => {
     const q = (searchText || '').trim().toLowerCase()
     if (!q || !searchInScripts) return acc + (d.scripts?.length || 0)
     const matching = (d.scripts || []).filter(s => {
@@ -275,18 +281,15 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
           <Typography variant='h4'>PATROL Scripting KM File Based Configuraiton Editor</Typography>
           <Box sx={{display:'flex', gap:2, alignItems:'center'}}>
             <IconButton size='small' aria-label='settings' onClick={()=>setSettingsOpen(true)}><SettingsIcon /></IconButton>
+            <Button size='small' variant='outlined' onClick={()=>{ window.open(window.location.href, '_blank') }}>Open in Electron</Button>
             <img src={MatrixLogo} alt="Matrix" style={{height:30}} />
             <img src={BMCHelixLogo} alt="BMCHelix" style={{height:34, background: 'transparent'}} />
           </Box>
         </Box>
       </Box>
 
-      <Box>
-        <Button variant='contained' onClick={openFile}>Load Configuration File</Button>
-        {filePath && <Typography sx={{ml:2}} component='span'>{filePath}</Typography>}
-      </Box>
-
       <Stack direction='row' spacing={1}>
+        <Button variant='contained' onClick={openFile}>Load Configuration File</Button>
         <Button variant='outlined' onClick={async ()=>{
           if(!filePath) return
           const { store } = await import('../store/store')
@@ -298,7 +301,7 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
           const { setDirty } = await import('../store/fbcskmSlice')
           store.dispatch(setDirty(false))
           alert('Saved with backup rotation (30 generations).')
-        }}>Save in place</Button>
+        }}>Save</Button>
         <Button variant='outlined' onClick={async ()=>{
           const suggested = filePath || 'config.txt'
           const saveTo = await window.electronAPI.saveFile(suggested)
@@ -311,7 +314,8 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
           const { setDirty } = await import('../store/fbcskmSlice')
           store.dispatch(setDirty(false))
           alert('Exported file saved.')
-        }}>Export as...</Button>
+        }}>Save As</Button>
+        {filePath && <Typography sx={{ml:2}} component='span'>{filePath}</Typography>}
       </Stack>
 
       <Viewer raw={raw} onRawChange={(t:string)=>{ setRaw(t); /* mark dirty when raw edited */ (async ()=>{ const { setDirty } = await import('../store/fbcskmSlice'); const { store } = await import('../store/store'); store.dispatch(setDirty(true)) })() }} />
@@ -346,7 +350,7 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
 
       {/* One clean device list — scripts shown on selection */}
       <Stack direction='row' spacing={2}>
-        <DeviceList devices={filteredDevices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} />
+        <DeviceList devices={displayDevices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} showDisabled={showDisabled} onToggleShowDisabled={() => setShowDisabled(!showDisabled)} />
         <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>requestSelectScript(id, selectedDeviceId)} onRequestEdit={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId); }} onSelectScript={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId) }} onCopyScript={onCopyScript} onCutScript={onCutScript} />
       </Stack>
 

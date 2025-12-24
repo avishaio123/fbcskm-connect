@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect } from 'react'
-import { Button, Box, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem } from '@mui/material'
+import { Button, Box, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem, FormControlLabel, Checkbox, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import EditIcon from '@mui/icons-material/Edit'
 import { useAppDispatch, useAppSelector } from '../store/store'
 import { addScript, deleteScript } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
@@ -28,18 +30,57 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
 
   const [instanceName, setInstanceName] = useState('NEW_Script')
   const [scriptPath, setScriptPath] = useState(() => computeDefaultScriptPath(scriptDefaults.matrixKBPath))
+  const [isRestmon, setIsRestmon] = useState(scriptDefaults.isRestmonDefault)
 
   // Update the scriptPath when defaults change so new scripts use the new default
   useEffect(() => {
-    setScriptPath(computeDefaultScriptPath(scriptDefaults.matrixKBPath))
-  }, [scriptDefaults])
+    if (isRestmon) {
+      setScriptPath(computeDefaultScriptPath(scriptDefaults.matrixKBPath))
+    } else {
+      setScriptPath(scriptDefaults.genericPath || '/myscripts/generic.ps1')
+    }
+  }, [scriptDefaults, isRestmon])
+
+  useEffect(() => {
+    setIsRestmon(scriptDefaults.isRestmonDefault ?? false)
+  }, [scriptDefaults.isRestmonDefault])
 
   // menu state
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [menuScriptId, setMenuScriptId] = useState<string | null>(null)
+  const [dryRunOpen, setDryRunOpen] = useState(false)
+  const [dryRunResults, setDryRunResults] = useState<{ command: string, results: string } | null>(null)
 
   const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuScriptId(id) }
   const closeMenu = () => { setMenuAnchor(null); setMenuScriptId(null) }
+
+  const dryRun = (scriptId: string) => {
+    const s = dev?.scripts.find(x => x.id === scriptId)
+    if (!s) return
+    const cmd = s.scriptPath + (s.isRestmon ? (' ' + encodedPreviewForScript(s)) : (' ' + (s.args || '')))
+    const results = '(placeholder - command not executed)'
+    setDryRunResults({ command: cmd, results })
+    setDryRunOpen(true)
+  }
+
+  const encodedPreviewForScript = (s: any) => {
+    if (!s.isRestmon) return s.args || ''
+    const parts: string[] = []
+    const a = s.args || {}
+    if (a.url) parts.push(`-url '${a.url}'`)
+    if (a.method) parts.push(`-method ${a.method}`)
+    if (a.outputFormat) parts.push(`-outputFormat ${a.outputFormat}`)
+    if (a.payload) parts.push(`-payload '${a.payload}'`)
+    if (a.searchKey) parts.push(`-searchKey '${a.searchKey}'`)
+    if (a.searchString) parts.push(`-searchString '${a.searchString}'`)
+    if (a.matchRegex) parts.push(`-matchRegex '${a.matchRegex}'`)
+    if (a.username) parts.push(`-username '${a.username}'`)
+    if (a.password) parts.push(`-password '${a.password}'`)
+    if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
+    let cmd = parts.join(' ')
+    cmd = cmd.replace(/\|/g, '<BMC_SEP>').replace(/\*/g, '<BMC_STAR>')
+    return cmd
+  }
 
   const onEdit = (id: string) => {
     // ensure parent knows which device the script belongs to so App can render the ScriptForm
@@ -50,8 +91,28 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
   if (!dev) return <Typography color='text.secondary'>Select a device.</Typography>
 
   const create = () => {
-    dispatch(addScript({ deviceId: dev.id, script: { id: uuid(), instanceName, scriptPath, args: { method: 'GET', outputFormat: 'json' }, pollIntervalSec: 300, timeoutSec: 300 } }))
-    setInstanceName('NEW_Script'); setScriptPath(computeDefaultScriptPath(scriptDefaults.matrixKBPath))
+    // Generate unique instance name
+    let baseName = 'NEW_Script'
+    let counter = 0
+    let uniqueName = baseName
+    while (dev.scripts.some(s => s.instanceName === uniqueName)) {
+      counter++
+      uniqueName = `${baseName}${counter}`
+    }
+    const script = {
+      id: uuid(),
+      instanceName: uniqueName,
+      scriptPath,
+      args: isRestmon ? { method: 'GET', outputFormat: 'json' } : '',
+      pollIntervalSec: 300,
+      timeoutSec: 300,
+      isRestmon
+    }
+    dispatch(addScript({ deviceId: dev.id, script }))
+    // Select the new script
+    onSelect(script.id)
+    if (onRequestEdit && deviceId) onRequestEdit(script.id, deviceId)
+    setInstanceName('NEW_Script'); setScriptPath(computeDefaultScriptPath(scriptDefaults.matrixKBPath)); setIsRestmon(scriptDefaults.isRestmonDefault)
   }
 
   const remove = (id: string) => {
@@ -73,6 +134,7 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
   return (
     <Stack spacing={2} sx={{minWidth: 420}}>
       <Typography variant='h6'>Scripts for: {dev.name}</Typography>
+      <FormControlLabel control={<Checkbox checked={isRestmon} onChange={e=>setIsRestmon(e.target.checked)} />} label="Is Restmon Script" />
       <Stack direction='row' spacing={1}>
         <TextField label='Instance name' value={instanceName} onChange={e=>setInstanceName(e.target.value)} />
         <TextField label='Script path' value={scriptPath} onChange={e=>setScriptPath(e.target.value)} />
@@ -95,7 +157,12 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
                   onClick={()=>{ if (onSelectScript) onSelectScript(s.id, dev.id); else onSelect(s.id) }}
                   sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
                 >
-                  <ListItemText primary={s.instanceName} secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
+                  <ListItemText primary={
+                    <Box sx={{display:'flex', alignItems:'center'}}>
+                      {s.dirty && <EditIcon sx={{mr:1, fontSize:16, color: '#4a148c'}} />}
+                      {s.instanceName}
+                    </Box>
+                  } secondary={`${s.args.method || 'GET'} ${s.args.outputFormat || 'json'}`} sx={{ '& .MuiListItemText-primary': { color: isSelected ? '#fff' : 'inherit' }, '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : 'inherit' } }} />
                 </ListItemButton>
               </ListItem>
             )
@@ -107,10 +174,46 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
         <MenuItem onClick={()=>{ if (menuScriptId) onEdit(menuScriptId); closeMenu() }}>Edit</MenuItem>
         <MenuItem onClick={()=>{ if (menuScriptId) duplicate(menuScriptId); closeMenu() }}>Duplicate</MenuItem>
+        <MenuItem onClick={()=>{ if (menuScriptId) dryRun(menuScriptId); closeMenu() }}>Dry Run</MenuItem>
         <MenuItem onClick={()=>{ if (menuScriptId && onCopyScript && deviceId) onCopyScript(menuScriptId, deviceId); closeMenu() }}>Copy</MenuItem>
         <MenuItem onClick={()=>{ if (menuScriptId && onCutScript && deviceId) onCutScript(menuScriptId, deviceId); closeMenu() }}>Cut</MenuItem>
         <MenuItem onClick={()=>{ if (menuScriptId) remove(menuScriptId); closeMenu() }} sx={{color: 'error.main'}}>Delete</MenuItem>
       </Menu>
+
+      <Dialog open={dryRunOpen} onClose={() => setDryRunOpen(false)} maxWidth='md' fullWidth>
+        <DialogTitle>Dry Run Results</DialogTitle>
+        <DialogContent>
+          {dryRunResults && (
+            <>
+              <Box sx={{ position: 'relative', mb: 2 }}>
+                <Typography variant='h6'>Command</Typography>
+                <IconButton sx={{ position: 'absolute', top: 0, right: 0 }} onClick={() => navigator.clipboard.writeText(dryRunResults.command)}>
+                  <ContentCopyIcon />
+                </IconButton>
+                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                  {dryRunResults.command}
+                </pre>
+              </Box>
+              <Box sx={{ position: 'relative' }}>
+                <Typography variant='h6'>Results</Typography>
+                <IconButton sx={{ position: 'absolute', top: 0, right: 0 }} onClick={() => navigator.clipboard.writeText(dryRunResults.results)}>
+                  <ContentCopyIcon />
+                </IconButton>
+                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', backgroundColor: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                  {dryRunResults.results.split('\n').map((line, i) => {
+                    if (line.toLowerCase().includes('error')) return <span key={i} style={{ color: 'red' }}>{line}\n</span>
+                    if (line.toLowerCase().includes('warn')) return <span key={i} style={{ color: 'orange' }}>{line}\n</span>
+                    return <span key={i}>{line}\n</span>
+                  })}
+                </pre>
+              </Box>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDryRunOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   )
 }

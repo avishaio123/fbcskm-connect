@@ -13,8 +13,12 @@ export default function Viewer({ raw, onRawChange }: { raw: string, onRawChange:
 
   // track whether the raw textarea was edited/pasted manually and not saved
   const [rawEdited, setRawEdited] = useState(false)
+  const dirty = useAppSelector(s => s.fbcskm.dirty)
 
   useEffect(() => { if (raw && raw.trim().length>0) dispatch(parseFBCSKM(raw)) }, [raw])
+
+  // when a save occurs, clear the pasted/manual-edited indicator
+  useEffect(() => { if (!dirty) setRawEdited(false) }, [dirty])
 
   const [tab, setTab] = useState<number>(0)
   const preview = serializeDevicesWithComments(devices, originalLines)

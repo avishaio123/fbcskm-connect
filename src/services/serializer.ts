@@ -58,7 +58,7 @@ function serializeDevice(dev: Device): string {
   ].join(',')
 
   const scripts = (dev.scripts ?? []).map((s) => {
-    const argsStr = structToArgString(s?.args)
+    const argsStr = s.isRestmon ? structToArgString(s?.args) : (s?.args ?? '')
     const poll = s?.pollIntervalSec ?? ''
     const tout = s?.timeoutSec ?? ''
     const reg = s?.regexField ?? ''

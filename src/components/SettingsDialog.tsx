@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Stack, TextField, Typography, Divider } from '@mui/material'
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Stack, TextField, Typography, Divider, FormControlLabel, Checkbox } from '@mui/material'
 import { useAppDispatch, useAppSelector } from '../store/store'
 import { setDefaultDeviceSettings, setDefaultScriptSettings } from '../store/fbcskmSlice'
 
@@ -18,6 +18,7 @@ export default function SettingsDialog({ open, onClose }: { open: boolean, onClo
   const [passphrase, setPassphrase] = useState('')
   const [matrixPath, setMatrixPath] = useState('')
   const [genericPath, setGenericPath] = useState('')
+  const [isRestmonDefault, setIsRestmonDefault] = useState(true)
 
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -32,6 +33,7 @@ export default function SettingsDialog({ open, onClose }: { open: boolean, onClo
     setPassphrase(defaults.passphrase ?? '')
     setMatrixPath(scriptDefaults.matrixKBPath ?? '/opt/matrixkb/restmon')
     setGenericPath(scriptDefaults.genericPath ?? scriptDefaults.matrixKBPath ?? '/opt/matrixkb/restmon')
+    setIsRestmonDefault(scriptDefaults.isRestmonDefault ?? true)
   }, [defaults, scriptDefaults, open])
 
   const isDirty = () => {
@@ -45,6 +47,7 @@ export default function SettingsDialog({ open, onClose }: { open: boolean, onClo
     if ((defaults.passphrase ?? '') !== (passphrase || '')) return true
     if ((scriptDefaults.matrixKBPath ?? '') !== (matrixPath || '')) return true
     if ((scriptDefaults.genericPath ?? '') !== (genericPath || '')) return true
+    if ((scriptDefaults.isRestmonDefault ?? true) !== isRestmonDefault) return true
     return false
   }
 
@@ -60,7 +63,7 @@ export default function SettingsDialog({ open, onClose }: { open: boolean, onClo
       passphrase: passphrase || ''
     }))
 
-    dispatch(setDefaultScriptSettings({ matrixKBPath: matrixPath || '/opt/matrixkb/restmon', genericPath: genericPath || matrixPath || '/opt/matrixkb/restmon' }))
+    dispatch(setDefaultScriptSettings({ matrixKBPath: matrixPath || '/opt/matrixkb/restmon', genericPath: genericPath || matrixPath || '/opt/matrixkb/restmon', isRestmonDefault }))
 
     setConfirmOpen(false)
     onClose()
@@ -90,6 +93,7 @@ export default function SettingsDialog({ open, onClose }: { open: boolean, onClo
     setPassphrase(defaults.passphrase ?? '')
     setMatrixPath(scriptDefaults.matrixKBPath ?? '/opt/matrixkb/restmon')
     setGenericPath(scriptDefaults.genericPath ?? scriptDefaults.matrixKBPath ?? '/opt/matrixkb/restmon')
+    setIsRestmonDefault(scriptDefaults.isRestmonDefault ?? true)
     setConfirmOpen(false)
     onClose()
   }
@@ -123,6 +127,7 @@ export default function SettingsDialog({ open, onClose }: { open: boolean, onClo
           <Typography variant='body2' color='text.secondary'>MatrixKB RestMon path and default for Generic scripts (for now Generic defaults to MatrixKB path).</Typography>
           <TextField label='MatrixKB RestMon Script Path' value={matrixPath} onChange={e=>setMatrixPath(e.target.value)} size='small' />
           <TextField label='Generic Script Path' value={genericPath} onChange={e=>setGenericPath(e.target.value)} size='small' />
+          <FormControlLabel control={<Checkbox checked={isRestmonDefault} onChange={e=>setIsRestmonDefault(e.target.checked)} />} label="Default to RestMon Script" />
         </Stack>
       </DialogContent>
       <DialogActions>

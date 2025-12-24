@@ -31,6 +31,8 @@ export default forwardRef<DeviceFormHandle, Props>(function DeviceForm({ open, d
       if (!draft.name || !draft.name.trim()) { alert('Device Name/IP is required'); return false }
       const withDefaults: Device = { ...draft, port: draft.port ?? 5985, connectionTimeoutMs: draft.connectionTimeoutMs ?? 2000, connectionPollSec: draft.connectionPollSec ?? 60 }
       dispatch(updateDevice(withDefaults))
+      draft.dirty = true
+      draft.scripts.forEach(s => s.dirty = false)
       if (closeAfter) onClose()
       return true
     },
