@@ -3,9 +3,53 @@ import React, { useState } from 'react'
 import { Button, List, ListItem, ListItemButton, ListItemText, Stack, TextField, Typography, IconButton, Menu, MenuItem, Box } from '@mui/material'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import EditIcon from '@mui/icons-material/Edit'
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { useAppDispatch, useAppSelector } from '../store/store'
-import { addDevice, deleteDevice, enableDevice, disableDevice } from '../store/fbcskmSlice'
+import { addDevice, deleteDevice, enableDevice, disableDevice, reorderDevices } from '../store/fbcskmSlice'
 import { v4 as uuid } from 'uuid'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+function SortableItem({ d, idx, isSelected, selectedId, onSelect, openMenu }: { d: any, idx: number, isSelected: boolean, selectedId: string | null, onSelect: (id: string) => void, openMenu: (e: React.MouseEvent<HTMLElement>, id: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: d.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <ListItem ref={setNodeRef} style={style} secondaryAction={
+      <IconButton edge='end' onClick={(e)=>openMenu(e, d.id)} aria-label='actions' size='small' sx={{ color: isSelected ? '#fff' : undefined }}>
+        <MoreVertIcon />
+      </IconButton>
+    } sx={{ backgroundColor: isSelected ? '#0b3d91' : (idx % 2 === 1 ? 'rgba(11,61,145,0.08)' : 'transparent') }}>
+      <IconButton {...attributes} {...listeners} size='small' sx={{ mr: 1, cursor: 'grab' }}>
+        <DragIndicatorIcon />
+      </IconButton>
+      <ListItemButton
+        selected={isSelected}
+        onClick={()=>onSelect(d.id)}
+        sx={{ py: 0.5, color: isSelected ? '#fff' : undefined, flex: 1 }}
+      >
+        <ListItemText primary={
+          <Box sx={{display:'flex', alignItems:'center'}}>
+            {d.dirty && <EditIcon sx={{mr:1, fontSize:16, color: '#4a148c'}} />}
+            {d.disabled && d.originalLine ? (d.originalLine.length > 50 ? d.originalLine.substring(0,50) + '...' : d.originalLine) : d.name}
+          </Box>
+        } secondary={`Scripts: ${d.scripts.length}`}
+          sx={{
+            '& .MuiListItemText-primary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') },
+            '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') }
+          }}
+        />
+      </ListItemButton>
+    </ListItem>
+  )
+}
 
 export default function DeviceList({ devices: devicesProp, selectedId, onSelect, onRequestEdit, onPasteScript, clipboard: clipboardProp, showDisabled, onToggleShowDisabled }: { devices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void, onPasteScript?: (deviceId: string)=>void, clipboard?: any|null, showDisabled?: boolean, onToggleShowDisabled?: () => void }){
   const dispatch = useAppDispatch()
@@ -66,6 +110,22 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
     onSelect(id)
     if (onRequestEdit) onRequestEdit(id)
   }
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      const oldIndex = devices.findIndex(d => d.id === active.id)
+      const newIndex = devices.findIndex(d => d.id === over.id)
+      const reordered = arrayMove(devices, oldIndex, newIndex)
+      dispatch(reorderDevices(reordered))
+    }
+  }
 
   return (
     <Stack spacing={2} sx={{minWidth: 360}}>
@@ -82,37 +142,19 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
       </Stack>
       {/* limit visible devices to 10 and make list scrollable */}
       <div style={{ maxHeight: 10 * 48, overflowY: 'auto' }}>
-        <List dense>
-          {devices.map((d, idx) => {
-          const isSelected = selectedId === d.id
-          return (
-            <ListItem key={d.id} secondaryAction={
-              <IconButton edge='end' onClick={(e)=>openMenu(e, d.id)} aria-label='actions' size='small' sx={{ color: isSelected ? '#fff' : undefined }}>
-                <MoreVertIcon />
-              </IconButton>
-            } sx={{ backgroundColor: isSelected ? '#0b3d91' : (idx % 2 === 1 ? 'rgba(11,61,145,0.08)' : 'transparent') }}>
-              <ListItemButton
-                selected={isSelected}
-                onClick={()=>onSelect(d.id)}
-                sx={{ py: 0.5, color: isSelected ? '#fff' : undefined }}
-              >
-                <ListItemText primary={
-                  <Box sx={{display:'flex', alignItems:'center'}}>
-                    {d.dirty && <EditIcon sx={{mr:1, fontSize:16, color: '#4a148c'}} />}
-                    {d.disabled && d.originalLine ? (d.originalLine.length > 50 ? d.originalLine.substring(0,50) + '...' : d.originalLine) : d.name}
-                  </Box>
-                } secondary={`Scripts: ${d.scripts.length}`}
-                  sx={{
-                    '& .MuiListItemText-primary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') },
-                    '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') }
-                  }}
-                />
-              </ListItemButton>
-            </ListItem>
-          )
-        })}
-          {devices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
-        </List>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={devices.map(d => d.id)} strategy={verticalListSortingStrategy}>
+            <List dense>
+              {devices.map((d, idx) => {
+                const isSelected = selectedId === d.id
+                return (
+                  <SortableItem key={d.id} d={d} idx={idx} isSelected={isSelected} selectedId={selectedId} onSelect={onSelect} openMenu={openMenu} />
+                )
+              })}
+              {devices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
+            </List>
+          </SortableContext>
+        </DndContext>
       </div>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>

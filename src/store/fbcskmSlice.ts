@@ -370,6 +370,17 @@ const slice = createSlice({
     },
     setDefaultScriptSettings(state, action: PayloadAction<DefaultScriptSettings>) {
       state.defaultScriptSettings = action.payload
+    },
+    reorderDevices(state, action: PayloadAction<Device[]>) {
+      state.devices = action.payload.map(d => ({ ...d, originalLineIndex: undefined }))
+      state.dirty = true
+    },
+    reorderScripts(state, action: PayloadAction<{ deviceId: string, scripts: ScriptInstance[] }>) {
+      const d = state.devices.find(x => x.id === action.payload.deviceId)
+      if (d) {
+        d.scripts = action.payload.scripts
+        state.dirty = true
+      }
     }
   }
 })
@@ -387,7 +398,9 @@ export const {
   setDirty,
   setClipboard,
   setDefaultDeviceSettings,
-  setDefaultScriptSettings
+  setDefaultScriptSettings,
+  reorderDevices,
+  reorderScripts
 } = slice.actions
 
 export default slice.reducer

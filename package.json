@@ -3,12 +3,14 @@
   "version": "2.3.1",
   "private": true,
   "description": "FBCSKM Manager - React web app with CRUD, Device Form, encoded command rules, backups",
-  "main": "index.html",
-  "type": "module",
+  "main": "electron/main.js",
+  "homepage": "./",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "vite"
+    "start": "vite",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\""
   },
   "dependencies": {
     "@emotion/react": "^11.11.4",
@@ -22,10 +24,16 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@types/react": "^18.2.39",
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.2.1",
+    "electron": "^39.2.7",
     "typescript": "^5.4.5",
-    "vite": "^5.0.12"
+    "vite": "^5.0.12",
+    "wait-on": "^9.0.3"
   }
 }
