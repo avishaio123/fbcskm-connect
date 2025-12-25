@@ -93,11 +93,19 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
   const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuScriptId(id) }
   const closeMenu = () => { setMenuAnchor(null); setMenuScriptId(null) }
 
-  const dryRun = (scriptId: string) => {
+  const dryRun = async (scriptId: string) => {
     const s = dev?.scripts.find(x => x.id === scriptId)
     if (!s) return
     const cmd = s.scriptPath + (s.isRestmon ? (' ' + encodedPreviewForScript(s)) : (' ' + (s.args || '')))
-    const results = '(placeholder - command not executed)'
+    let results = '(placeholder - command not executed)'
+    if (window.electronAPI?.runCommand) {
+      try {
+        const res = await window.electronAPI.runCommand(cmd)
+        results = res.error ? `Error: ${res.error}\nStdout: ${res.stdout}\nStderr: ${res.stderr}` : `Stdout: ${res.stdout}\nStderr: ${res.stderr}`
+      } catch (e) {
+        results = `Failed to run: ${e}`
+      }
+    }
     setDryRunResults({ command: cmd, results })
     setDryRunOpen(true)
   }

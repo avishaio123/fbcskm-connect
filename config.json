@@ -1,3 +1,8 @@
 {
-  "client": "web"
+  "client": "web",
+  // Set to "web" to run the app in web browser mode (default).
+  // Set to "electron" to run the app in Electron desktop mode.
+  // Note: For electron mode, you need to have Electron installed.
+  // To run in web mode: npm run dev
+  // To run in electron mode: npm run electron-dev (for development) or npm run build && npm run electron (for production)
 }

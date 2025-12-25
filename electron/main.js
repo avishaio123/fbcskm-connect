@@ -107,6 +107,15 @@ ipcMain.handle('rotate-backups', async (event, filePath) => {
   return true;
 });
 
-ipcMain.handle('open-in-electron', async () => {
-  // Already in electron
-});
+ipcMain.handle('run-command', async (event, command) => {
+  const { exec } = require('child_process')
+  return new Promise((resolve, reject) => {
+    exec(command, { timeout: 30000 }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ error: error.message, stdout, stderr })
+      } else {
+        resolve({ stdout, stderr })
+      }
+    })
+  })
+})

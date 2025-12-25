@@ -73,7 +73,7 @@ function serializeDevice(dev: Device): string {
 }
 
 export function serializeDevices(devices: Device[]): string {
-  return (devices ?? []).map(serializeDevice).join('\n')
+  return (devices ?? []).map(d => (d.disabled ? '# ' : '') + serializeDevice(d)).join('\n')
 }
 
 /**
@@ -93,7 +93,7 @@ export function serializeDevicesWithComments(devices: Device[], originalLines?: 
   for (const d of devices) {
     const idx = (d as any).originalLineIndex as number | undefined
     if (typeof idx === 'number') deviceByIndex.set(idx, d)
-    else appended.push(serializeDevice(d))
+    else appended.push(d)
   }
 
   for (let i = 0; i < originalLines.length; i++) {
@@ -101,12 +101,12 @@ export function serializeDevicesWithComments(devices: Device[], originalLines?: 
     if (!l || !l.trim()) { out.push(''); continue }
     if (l.trim().startsWith('#')) { out.push(l); continue }
     const dev = deviceByIndex.get(i)
-    if (dev) out.push(serializeDevice(dev))
+    if (dev) out.push((dev.disabled ? '# ' : '') + serializeDevice(dev))
     // else if device was deleted, skip this line
   }
 
   // append new devices at the end
-  for (const s of appended) out.push(s)
+  for (const d of appended) out.push((d.disabled ? '# ' : '') + serializeDevice(d))
 
   return out.join('\n')
 }
