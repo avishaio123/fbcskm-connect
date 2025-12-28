@@ -351,7 +351,7 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
 
       {/* One clean device list — scripts shown on selection */}
       <Stack direction='row' spacing={2}>
-        <DeviceList devices={displayDevices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} showDisabled={showDisabled} onToggleShowDisabled={() => setShowDisabled(!showDisabled)} />
+        <DeviceList devices={devices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} showDisabled={showDisabled} onToggleShowDisabled={() => setShowDisabled(!showDisabled)} />
         <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>requestSelectScript(id, selectedDeviceId)} onRequestEdit={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId); }} onSelectScript={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId) }} onCopyScript={onCopyScript} onCutScript={onCutScript} />
       </Stack>
 

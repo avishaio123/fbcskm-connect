@@ -63,6 +63,8 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
   const [menuDeviceId, setMenuDeviceId] = useState<string | null>(null)
   const [globalMenuAnchor, setGlobalMenuAnchor] = useState<HTMLElement | null>(null)
 
+  const displayDevices = showDisabled ? devices : devices.filter(d => !d.disabled)
+
   const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { setMenuAnchor(e.currentTarget); setMenuDeviceId(id) }
   const closeMenu = () => { setMenuAnchor(null); setMenuDeviceId(null) }
 
@@ -143,15 +145,15 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
       {/* limit visible devices to 10 and make list scrollable */}
       <div style={{ maxHeight: 10 * 48, overflowY: 'auto' }}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={devices.map(d => d.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={displayDevices.map(d => d.id)} strategy={verticalListSortingStrategy}>
             <List dense>
-              {devices.map((d, idx) => {
+              {displayDevices.map((d, idx) => {
                 const isSelected = selectedId === d.id
                 return (
                   <SortableItem key={d.id} d={d} idx={idx} isSelected={isSelected} selectedId={selectedId} onSelect={onSelect} openMenu={openMenu} />
                 )
               })}
-              {devices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
+              {displayDevices.length===0 && <Typography color='text.secondary'>No devices.</Typography>}
             </List>
           </SortableContext>
         </DndContext>

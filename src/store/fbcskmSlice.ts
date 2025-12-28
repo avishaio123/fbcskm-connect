@@ -290,7 +290,7 @@ const slice = createSlice({
         // If the line is commented out but looks like a device definition, parse it
         if (line.trim().startsWith('#')) {
           const uncomment = line.replace(/^\s*#\s*/, '')
-          if (uncomment.includes('|')) { // Only if it has |, meaning device|scripts structure
+          if (uncomment.split(',').length >= 2) { // Only if it has commas, meaning device fields
             try {
               const d = parseLine(uncomment)
               if (d) { (d as any).originalLineIndex = i; d.disabled = true; d.originalLine = line; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
@@ -302,7 +302,7 @@ const slice = createSlice({
           }
         }
         const d = parseLine(line)
-        if (d && line.includes('|')) { (d as any).originalLineIndex = i; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
+        if (d) { (d as any).originalLineIndex = i; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
       }
       state.dirty = false
     },
@@ -312,7 +312,50 @@ const slice = createSlice({
     },
     updateDevice(state, action: PayloadAction<Device>) {
       const i = state.devices.findIndex(d => d.id === action.payload.id)
-      if (i >= 0) { state.devices[i] = { ...action.payload, dirty: true }; state.devices[i].scripts.forEach(s => s.dirty = false) } // assume scripts not changed
+      if (i >= 0) { 
+        state.devices[i] = { ...action.payload, dirty: true }; 
+        state.devices[i].scripts.forEach(s => s.dirty = false)
+        // if disabled, update originalLine
+        if (state.devices[i].disabled) {
+          const dev = state.devices[i]
+          const devSeg = [
+            dev.name ?? '',
+            dev.forcedIp ?? '',
+            dev.port ?? '',
+            dev.connectionTimeoutMs ?? '',
+            dev.connectionPollSec ?? '',
+            dev.username ?? '',
+            dev.password ?? '',
+            dev.publicKeyPath ?? '',
+            dev.privateKeyPath ?? '',
+            dev.passphrase ?? ''
+          ].join(',')
+          const scripts = (dev.scripts ?? []).map(s => {
+            const parts: string[] = []
+            const a = s.args || {}
+            if (a.url) parts.push(`-url ${singleQuote(a.url)}`)
+            if (a.method) parts.push(`-method ${a.method}`)
+            if (a.outputFormat) parts.push(`-outputFormat ${a.outputFormat}`)
+            if (a.payload) parts.push(`-payload ${singleQuote(a.payload)}`)
+            if (a.searchKey) parts.push(`-searchKey ${singleQuote(a.searchKey)}`)
+            if (a.searchString) parts.push(`-searchString ${singleQuote(a.searchString)}`)
+            if (a.matchRegex) parts.push(`-matchRegex ${singleQuote(a.matchRegex)}`)
+            if (a.username) parts.push(`-username ${singleQuote(a.username)}`)
+            if (a.password) parts.push(`-password ${singleQuote(a.password)}`)
+            if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
+            if (a.encryptPass) parts.push(`-encryptPass ${a.encryptPass}`)
+            if (a.headers) parts.push(`-headers ${singleQuote(a.headers)}`)
+            let cmd = ` ${parts.join(' ')} `
+            cmd = cmd.replace(/\|/g, '<BMC_SEP>').replace(/\*/g, '<BMC_STAR>')
+            const poll = s.pollIntervalSec ?? ''
+            const tout = s.timeoutSec ?? ''
+            const reg = s.regexField ?? ''
+            return `${s.instanceName}*${s.scriptPath}*${cmd}*${poll}*${tout}*${reg}|`
+          })
+          const serialized = [devSeg, ...scripts].join('|')
+          state.devices[i].originalLine = '# ' + serialized
+        }
+      }
       state.dirty = true
     },
     deleteDevice(state, action: PayloadAction<string>) {
@@ -373,6 +416,7 @@ const slice = createSlice({
     },
     reorderDevices(state, action: PayloadAction<Device[]>) {
       state.devices = action.payload.map(d => ({ ...d, originalLineIndex: undefined }))
+      state.originalLines = [] // Clear original lines to avoid duplication after reorder
       state.dirty = true
     },
     reorderScripts(state, action: PayloadAction<{ deviceId: string, scripts: ScriptInstance[] }>) {
