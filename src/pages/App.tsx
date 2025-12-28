@@ -82,16 +82,22 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
   const filteredDevices = useMemo(() => {
     const q = (searchText || '').trim().toLowerCase()
     if (!q) return devices
-    return devices.filter(d => {
-      if ((d.name || '').toLowerCase().includes(q)) return true
-      if (!searchInScripts) return false
-      for (const s of d.scripts || []) {
-        if ((s.instanceName || '').toLowerCase().includes(q)) return true
-        if ((s.scriptPath || '').toLowerCase().includes(q)) return true
-        if (JSON.stringify(s.args || {}).toLowerCase().includes(q)) return true
+    return devices.map(d => {
+      const nameMatch = (d.name || '').toLowerCase().includes(q)
+      let scriptMatches = 0
+      if (searchInScripts) {
+        for (const s of d.scripts || []) {
+          if ((s.instanceName || '').toLowerCase().includes(q) || (s.scriptPath || '').toLowerCase().includes(q) || JSON.stringify(s.args || {}).toLowerCase().includes(q)) {
+            scriptMatches++
+          }
+        }
       }
-      return false
-    })
+      const matches = nameMatch || scriptMatches > 0
+      if (matches) {
+        return { ...d, matchingScriptsCount: nameMatch ? d.scripts.length : scriptMatches }
+      }
+      return null
+    }).filter(Boolean) as typeof devices
   }, [devices, searchText, searchInScripts])
 
   const displayDevices = useMemo(() => {
@@ -351,7 +357,7 @@ const [loadUnsavedOpen, setLoadUnsavedOpen] = useState(false)
 
       {/* One clean device list — scripts shown on selection */}
       <Stack direction='row' spacing={2}>
-        <DeviceList devices={devices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} showDisabled={showDisabled} onToggleShowDisabled={() => setShowDisabled(!showDisabled)} />
+        <DeviceList devices={displayDevices} fullDevices={devices} selectedId={selectedDeviceId} onSelect={(id:any)=>requestSelectDevice(id)} onRequestEdit={(id)=>{ requestSelectDevice(id); setDeviceFormOpen(true) }} onPasteScript={(deviceId)=>onPasteScriptToDevice(deviceId)} clipboard={clipboard} showDisabled={showDisabled} onToggleShowDisabled={() => setShowDisabled(!showDisabled)} />
         <ScriptList deviceId={selectedDeviceId} selectedId={selectedScriptId} searchText={searchText} searchInScripts={searchInScripts} onSelect={(id:any)=>requestSelectScript(id, selectedDeviceId)} onRequestEdit={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId); }} onSelectScript={(scriptId, deviceId)=>{ requestSelectScript(scriptId, deviceId) }} onCopyScript={onCopyScript} onCutScript={onCutScript} />
       </Stack>
 

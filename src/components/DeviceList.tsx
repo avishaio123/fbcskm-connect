@@ -40,7 +40,7 @@ function SortableItem({ d, idx, isSelected, selectedId, onSelect, openMenu }: { 
             {d.dirty && <EditIcon sx={{mr:1, fontSize:16, color: '#4a148c'}} />}
             {d.disabled && d.originalLine ? (d.originalLine.length > 50 ? d.originalLine.substring(0,50) + '...' : d.originalLine) : d.name}
           </Box>
-        } secondary={`Scripts: ${d.scripts.length}`}
+        } secondary={`Scripts: ${(d as any).matchingScriptsCount ?? d.scripts.length}`}
           sx={{
             '& .MuiListItemText-primary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') },
             '& .MuiListItemText-secondary': { color: isSelected ? '#fff' : (d.disabled ? 'text.disabled' : 'inherit') }
@@ -51,9 +51,10 @@ function SortableItem({ d, idx, isSelected, selectedId, onSelect, openMenu }: { 
   )
 }
 
-export default function DeviceList({ devices: devicesProp, selectedId, onSelect, onRequestEdit, onPasteScript, clipboard: clipboardProp, showDisabled, onToggleShowDisabled }: { devices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void, onPasteScript?: (deviceId: string)=>void, clipboard?: any|null, showDisabled?: boolean, onToggleShowDisabled?: () => void }){
+export default function DeviceList({ devices: devicesProp, fullDevices: fullDevicesProp, selectedId, onSelect, onRequestEdit, onPasteScript, clipboard: clipboardProp, showDisabled, onToggleShowDisabled }: { devices?: any[], fullDevices?: any[], selectedId?: string|null, onSelect: (id: string|null)=>void, onRequestEdit?: (id: string)=>void, onPasteScript?: (deviceId: string)=>void, clipboard?: any|null, showDisabled?: boolean, onToggleShowDisabled?: () => void }){
   const dispatch = useAppDispatch()
   const devices = devicesProp ?? useAppSelector(s=>s.fbcskm.devices)
+  const fullDevices = fullDevicesProp ?? devices
   const clipboard = useAppSelector(s => (s.fbcskm as any).clipboard)
   const [name, setName] = useState('')
   const [forcedIp, setForcedIp] = useState('')
@@ -63,7 +64,7 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
   const [menuDeviceId, setMenuDeviceId] = useState<string | null>(null)
   const [globalMenuAnchor, setGlobalMenuAnchor] = useState<HTMLElement | null>(null)
 
-  const displayDevices = showDisabled ? devices : devices.filter(d => !d.disabled)
+  const displayDevices = devices
 
   const openMenu = (e: React.MouseEvent<HTMLElement>, id: string) => { setMenuAnchor(e.currentTarget); setMenuDeviceId(id) }
   const closeMenu = () => { setMenuAnchor(null); setMenuDeviceId(null) }
@@ -102,7 +103,8 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
       ...d,
       id: uuid(),
       name: `${d.name} (copy)`,
-      scripts: (d.scripts || []).map(s => ({ ...s, id: uuid() }))
+      scripts: (d.scripts || []).map(s => ({ ...s, id: uuid() })),
+      originalLineIndex: undefined
     }
     dispatch(addDevice(copy as any))
     onSelect(copy.id)
@@ -122,9 +124,9 @@ export default function DeviceList({ devices: devicesProp, selectedId, onSelect,
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (over && active.id !== over.id) {
-      const oldIndex = devices.findIndex(d => d.id === active.id)
-      const newIndex = devices.findIndex(d => d.id === over.id)
-      const reordered = arrayMove(devices, oldIndex, newIndex)
+      const oldIndex = fullDevices.findIndex(d => d.id === active.id)
+      const newIndex = fullDevices.findIndex(d => d.id === over.id)
+      const reordered = arrayMove(fullDevices, oldIndex, newIndex)
       dispatch(reorderDevices(reordered))
     }
   }

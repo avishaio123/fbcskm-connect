@@ -359,6 +359,13 @@ const slice = createSlice({
       state.dirty = true
     },
     deleteDevice(state, action: PayloadAction<string>) {
+      const d = state.devices.find(x => x.id === action.payload)
+      if (d) {
+        const idx = (d as any).originalLineIndex as number | undefined
+        if (typeof idx === 'number' && state.originalLines) {
+          state.originalLines[idx] = ''
+        }
+      }
       state.devices = state.devices.filter(d => d.id !== action.payload)
       state.dirty = true
     },
