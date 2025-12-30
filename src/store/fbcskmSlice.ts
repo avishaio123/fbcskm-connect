@@ -14,22 +14,28 @@ export interface RestMonArgs {
   password?: string
   decryptPass?: 'TRUE' | 'FALSE'
   encryptPass?: 'TRUE' | 'FALSE'
+  headers?: string
 }
 
 export interface ScriptInstance {
   id: string
   instanceName: string
   scriptPath: string
-  args: RestMonArgs
+  args: any // RestMonArgs for Restmon scripts, string for generic
   pollIntervalSec?: number
   timeoutSec?: number
   regexField?: string
+  isRestmon?: boolean
+  dirty?: boolean
 }
 
 export interface Device {
   id: string
   name: string
   forcedIp?: string
+  disabled?: boolean
+  // original line index when parsed from a file (used to preserve comments/positions)
+  originalLineIndex?: number
   port?: number | null
   connectionTimeoutMs?: number | null
   connectionPollSec?: number | null
@@ -39,11 +45,14 @@ export interface Device {
   privateKeyPath?: string
   passphrase?: string
   scripts: ScriptInstance[]
+  dirty?: boolean
+  originalLine?: string
 }
 
 export interface DefaultScriptSettings {
   matrixKBPath: string
   genericPath: string
+  isRestmonDefault: boolean
 }
 
 export interface FBCSKMState {
@@ -70,7 +79,8 @@ const initialState: FBCSKMState = {
   },
   defaultScriptSettings: {
     matrixKBPath: 'c:/MatrixKB/Scripts/Restmon',
-    genericPath: 'c:/MatrixKB/Scripts'
+    genericPath: 'c:/MatrixKB/Scripts',
+    isRestmonDefault: true
   }
  }
 
@@ -135,6 +145,9 @@ function parseArgsToStruct(argstr: string): RestMonArgs {
       case 'encryptpass':
         args.encryptPass = val.toUpperCase() === 'TRUE' ? 'TRUE' : 'FALSE'
         break
+      case 'headers':
+        args.headers = val
+        break
     }
   }
 
@@ -187,15 +200,17 @@ function parseLine(line: string) {
     const regex = parts.length >= 6 ? parts[5] : undefined
 
     const args = parseArgsToStruct(argstr)
+    const isRestmon = argstr.includes('-') // Simple check: if has -, it's Restmon
 
     dev.scripts.push({
       id: uuid(),
       instanceName,
       scriptPath,
-      args,
+      args: isRestmon ? args : argstr, // For Restmon, parsed object; else, raw string
       pollIntervalSec: poll,
       timeoutSec: tout,
-      regexField: regex
+      regexField: regex,
+      isRestmon
     })
   }
 
@@ -242,6 +257,7 @@ function serializeDevice(dev: Device): string {
     if (a.password) parts.push(`-password ${singleQuote(a.password)}`)
     if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
     if (a.encryptPass) parts.push(`-encryptPass ${a.encryptPass}`)
+    if (a.headers) parts.push(`-headers ${singleQuote(a.headers)}`)
 
     let cmd = ` ${parts.join(' ')} `
     // Encode reserved separators in args payload
@@ -270,9 +286,23 @@ const slice = createSlice({
       for (let i = 0; i < allLines.length; i++) {
         const line = allLines[i]
         if (!line || !line.trim()) continue
-        if (line.trim().startsWith('#')) continue // comments are preserved but not parsed as devices
+
+        // If the line is commented out but looks like a device definition, parse it
+        if (line.trim().startsWith('#')) {
+          const uncomment = line.replace(/^\s*#\s*/, '')
+          if (uncomment.split(',').length >= 2) { // Only if it has commas, meaning device fields
+            try {
+              const d = parseLine(uncomment)
+              if (d) { (d as any).originalLineIndex = i; d.disabled = true; d.originalLine = line; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
+              continue
+            } catch (e) {
+              // not a device line, leave as comment
+              continue
+            }
+          }
+        }
         const d = parseLine(line)
-        if (d) { (d as any).originalLineIndex = i; state.devices.push(d) }
+        if (d) { (d as any).originalLineIndex = i; d.dirty = false; d.scripts.forEach(s => s.dirty = false); state.devices.push(d) }
       }
       state.dirty = false
     },
@@ -282,10 +312,60 @@ const slice = createSlice({
     },
     updateDevice(state, action: PayloadAction<Device>) {
       const i = state.devices.findIndex(d => d.id === action.payload.id)
-      if (i >= 0) state.devices[i] = action.payload
+      if (i >= 0) { 
+        state.devices[i] = { ...action.payload, dirty: true }; 
+        state.devices[i].scripts.forEach(s => s.dirty = false)
+        // if disabled, update originalLine
+        if (state.devices[i].disabled) {
+          const dev = state.devices[i]
+          const devSeg = [
+            dev.name ?? '',
+            dev.forcedIp ?? '',
+            dev.port ?? '',
+            dev.connectionTimeoutMs ?? '',
+            dev.connectionPollSec ?? '',
+            dev.username ?? '',
+            dev.password ?? '',
+            dev.publicKeyPath ?? '',
+            dev.privateKeyPath ?? '',
+            dev.passphrase ?? ''
+          ].join(',')
+          const scripts = (dev.scripts ?? []).map(s => {
+            const parts: string[] = []
+            const a = s.args || {}
+            if (a.url) parts.push(`-url ${singleQuote(a.url)}`)
+            if (a.method) parts.push(`-method ${a.method}`)
+            if (a.outputFormat) parts.push(`-outputFormat ${a.outputFormat}`)
+            if (a.payload) parts.push(`-payload ${singleQuote(a.payload)}`)
+            if (a.searchKey) parts.push(`-searchKey ${singleQuote(a.searchKey)}`)
+            if (a.searchString) parts.push(`-searchString ${singleQuote(a.searchString)}`)
+            if (a.matchRegex) parts.push(`-matchRegex ${singleQuote(a.matchRegex)}`)
+            if (a.username) parts.push(`-username ${singleQuote(a.username)}`)
+            if (a.password) parts.push(`-password ${singleQuote(a.password)}`)
+            if (a.decryptPass) parts.push(`-decryptPass ${a.decryptPass}`)
+            if (a.encryptPass) parts.push(`-encryptPass ${a.encryptPass}`)
+            if (a.headers) parts.push(`-headers ${singleQuote(a.headers)}`)
+            let cmd = ` ${parts.join(' ')} `
+            cmd = cmd.replace(/\|/g, '<BMC_SEP>').replace(/\*/g, '<BMC_STAR>')
+            const poll = s.pollIntervalSec ?? ''
+            const tout = s.timeoutSec ?? ''
+            const reg = s.regexField ?? ''
+            return `${s.instanceName}*${s.scriptPath}*${cmd}*${poll}*${tout}*${reg}|`
+          })
+          const serialized = [devSeg, ...scripts].join('|')
+          state.devices[i].originalLine = '# ' + serialized
+        }
+      }
       state.dirty = true
     },
     deleteDevice(state, action: PayloadAction<string>) {
+      const d = state.devices.find(x => x.id === action.payload)
+      if (d) {
+        const idx = (d as any).originalLineIndex as number | undefined
+        if (typeof idx === 'number' && state.originalLines) {
+          state.originalLines[idx] = ''
+        }
+      }
       state.devices = state.devices.filter(d => d.id !== action.payload)
       state.dirty = true
     },
@@ -298,7 +378,28 @@ const slice = createSlice({
       const d = state.devices.find(x => x.id === action.payload.deviceId)
       if (!d) return
       const i = d.scripts.findIndex(s => s.id === action.payload.script.id)
-      if (i >= 0) d.scripts[i] = action.payload.script
+      if (i >= 0) d.scripts[i] = { ...action.payload.script, dirty: true }
+      state.dirty = true
+    },
+    enableDevice(state, action: PayloadAction<string>) {
+      const d = state.devices.find(x => x.id === action.payload)
+      if (!d) return
+      d.disabled = false
+      const idx = (d as any).originalLineIndex as number | undefined
+      if (typeof idx === 'number' && state.originalLines && state.originalLines[idx]) {
+        state.originalLines[idx] = state.originalLines[idx].replace(/^\s*#\s*/, '')
+      }
+      state.dirty = true
+    },
+    disableDevice(state, action: PayloadAction<string>) {
+      const d = state.devices.find(x => x.id === action.payload)
+      if (!d) return
+      d.disabled = true
+      const idx = (d as any).originalLineIndex as number | undefined
+      if (typeof idx === 'number' && state.originalLines) {
+        const line = state.originalLines[idx] ?? ''
+        if (!line.trim().startsWith('#')) state.originalLines[idx] = `# ${line}`
+      }
       state.dirty = true
     },
     deleteScript(state, action: PayloadAction<{ deviceId: string, scriptId: string }>) {
@@ -307,13 +408,30 @@ const slice = createSlice({
       d.scripts = d.scripts.filter(s => s.id !== action.payload.scriptId)
       state.dirty = true
     },
-    setDirty(state, action: PayloadAction<boolean>) { state.dirty = action.payload },
+    setDirty(state, action: PayloadAction<boolean>) { 
+      state.dirty = action.payload 
+      if (!action.payload) {
+        state.devices.forEach(d => { d.dirty = false; d.scripts.forEach(s => s.dirty = false) })
+      }
+    },
     setClipboard(state, action: PayloadAction<any | null>) { (state as any).clipboard = action.payload },
     setDefaultDeviceSettings(state, action: PayloadAction<Partial<Omit<Device, 'id' | 'name' | 'forcedIp' | 'scripts'>>>) {
       state.defaultDeviceSettings = { ...(state.defaultDeviceSettings || {}), ...action.payload }
     },
     setDefaultScriptSettings(state, action: PayloadAction<DefaultScriptSettings>) {
       state.defaultScriptSettings = action.payload
+    },
+    reorderDevices(state, action: PayloadAction<Device[]>) {
+      state.devices = action.payload.map(d => ({ ...d, originalLineIndex: undefined }))
+      state.originalLines = [] // Clear original lines to avoid duplication after reorder
+      state.dirty = true
+    },
+    reorderScripts(state, action: PayloadAction<{ deviceId: string, scripts: ScriptInstance[] }>) {
+      const d = state.devices.find(x => x.id === action.payload.deviceId)
+      if (d) {
+        d.scripts = action.payload.scripts
+        state.dirty = true
+      }
     }
   }
 })
@@ -326,10 +444,14 @@ export const {
   addScript,
   updateScript,
   deleteScript,
+  enableDevice,
+  disableDevice,
   setDirty,
   setClipboard,
   setDefaultDeviceSettings,
-  setDefaultScriptSettings
+  setDefaultScriptSettings,
+  reorderDevices,
+  reorderScripts
 } = slice.actions
 
 export default slice.reducer

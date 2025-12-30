@@ -37,6 +37,7 @@ function structToArgString(args: any): string {
   if (args.password) parts.push(`-password ${singleQuote(args.password)}`)
   if (args.decryptPass) parts.push(`-decryptPass ${args.decryptPass}`)
   if (args.encryptPass) parts.push(`-encryptPass ${args.encryptPass}`)
+  if (args.headers) parts.push(`-headers ${singleQuote(args.headers)}`)
 
   let s = parts.join(' ')
   s = encodeSpecials(s)
@@ -58,7 +59,7 @@ function serializeDevice(dev: Device): string {
   ].join(',')
 
   const scripts = (dev.scripts ?? []).map((s) => {
-    const argsStr = structToArgString(s?.args)
+    const argsStr = s.isRestmon ? structToArgString(s?.args) : (s?.args ?? '')
     const poll = s?.pollIntervalSec ?? ''
     const tout = s?.timeoutSec ?? ''
     const reg = s?.regexField ?? ''
@@ -72,7 +73,7 @@ function serializeDevice(dev: Device): string {
 }
 
 export function serializeDevices(devices: Device[]): string {
-  return (devices ?? []).map(serializeDevice).join('\n')
+  return (devices ?? []).map(d => (d.disabled ? '# ' : '') + serializeDevice(d)).join('\n')
 }
 
 /**
@@ -92,7 +93,7 @@ export function serializeDevicesWithComments(devices: Device[], originalLines?: 
   for (const d of devices) {
     const idx = (d as any).originalLineIndex as number | undefined
     if (typeof idx === 'number') deviceByIndex.set(idx, d)
-    else appended.push(serializeDevice(d))
+    else appended.push(d)
   }
 
   for (let i = 0; i < originalLines.length; i++) {
@@ -100,12 +101,12 @@ export function serializeDevicesWithComments(devices: Device[], originalLines?: 
     if (!l || !l.trim()) { out.push(''); continue }
     if (l.trim().startsWith('#')) { out.push(l); continue }
     const dev = deviceByIndex.get(i)
-    if (dev) out.push(serializeDevice(dev))
+    if (dev) out.push((dev.disabled ? '# ' : '') + serializeDevice(dev))
     // else if device was deleted, skip this line
   }
 
   // append new devices at the end
-  for (const s of appended) out.push(s)
+  for (const d of appended) out.push((d.disabled ? '# ' : '') + serializeDevice(d))
 
   return out.join('\n')
 }
