@@ -4,6 +4,7 @@ import { Box, Button, Grid, MenuItem, Stack, TextField, Typography, Dialog, Dial
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { Device, ScriptInstance, updateScript } from '../store/fbcskmSlice'
 import { useAppDispatch } from '../store/store'
+import config from '../config'
 
 export type ScriptFormHandle = {
   isDirty: () => boolean
@@ -18,13 +19,43 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
   const [dryRunOpen, setDryRunOpen] = useState(false)
   const [dryRunResults, setDryRunResults] = useState<{ command: string, results: string } | null>(null)
   const [headersError, setHeadersError] = useState(false)
+  const [payloadError, setPayloadError] = useState(false)
 
   const validateHeaders = (value: string) => !value || (value.trim().startsWith('@{') && value.trim().endsWith('}'))
+
+  const validatePayload = (value: string, format: string) => {
+    if (!value.trim()) return true
+    if (format === 'json') {
+      try {
+        JSON.parse(value)
+        return true
+      } catch {
+        return false
+      }
+    } else if (format === 'xml') {
+      try {
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(value, 'text/xml')
+        return !doc.querySelector('parsererror')
+      } catch {
+        return false
+      }
+    } else if (format === 'text') {
+      return true
+    }
+    return true
+  }
 
   // Keep local draft in sync when the parent selects a different script
   useEffect(() => {
     setDraft(script)
   }, [script])
+
+  useEffect(() => {
+    if (draft.isRestmon) {
+      setPayloadError(!validatePayload(draft.args.payload || '', draft.args.outputFormat || 'json'))
+    }
+  }, [draft.args.outputFormat, draft.args.payload])
 
   useImperativeHandle(ref, () => ({
     isDirty: () => JSON.stringify(draft) !== JSON.stringify(script),
@@ -32,25 +63,31 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
     discard: () => setDraft(script)
   }), [draft, script, device, dispatch, onChange])
 
-  const set = (path: string, value: any) => {
+  const set = (fieldName: string, value: any) => {
+    const field = config.scriptUI.allFields.find(f => f.name === fieldName)
+    const isNumber = field?.type === 'number'
+    const restmonSpecific = ['method', 'outputFormat', 'url', 'payload', 'headers', 'matchRegex', 'username', 'password', 'decryptPass']
     setDraft(prev => {
-      const next = { ...prev, args: typeof prev.args === 'string' ? prev.args : { ...prev.args } }
-      if (path.startsWith('args.')) {
-        const key = path.substring(5) as keyof typeof next.args
-          ; (next.args as any)[key] = value
-      } else if (path === 'instanceName') next.instanceName = value
-      else if (path === 'scriptPath') next.scriptPath = value
-      else if (path === 'poll') next.pollIntervalSec = Number(value)
-      else if (path === 'timeout') next.timeoutSec = Number(value)
-      else if (path === 'regexField') next.regexField = value
+      const next = { ...prev }
+      if (draft.isRestmon && restmonSpecific.includes(fieldName)) {
+        if (typeof next.args !== 'object' || !next.args) next.args = {}
+        next.args = { ...next.args }
+        ;(next.args as any)[fieldName] = isNumber ? Number(value) : value
+      } else if (fieldName === 'args') {
+        next.args = value
+      } else {
+        ;(next as any)[fieldName] = isNumber ? Number(value) : value
+      }
       return next
     })
   }
 
   const encodedPreview = (() => {
-    if (!draft.isRestmon) return draft.args || ''
+    const encodeSpecials = (s: string): string => s.replace(/\|/g, '<BMC_SEP>').replace(/\*/g, '<BMC_STAR>')
+    if (!draft.isRestmon) return encodeSpecials(draft.args || '')
+    if (typeof draft.args !== 'object' || !draft.args) return ' '
     const parts: string[] = []
-    const a = draft.args || {}
+    const a = draft.args
     if (a.url) parts.push(`-url '${a.url}'`)
     if (a.method) parts.push(`-method ${a.method}`)
     if (a.outputFormat) parts.push(`-outputFormat ${a.outputFormat}`)
@@ -67,6 +104,24 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
     return cmd
   })()
 
+  const fieldOrder = draft.isRestmon ? config.scriptUI.restmonOrder : config.scriptUI.genericOrder
+  const fieldsToShow = fieldOrder.map(name => config.scriptUI.allFields.find(f => f.name === name)).filter(Boolean) as FieldConfig[]
+
+  const getValue = (fieldName: string) => {
+    const restmonSpecific = ['method', 'outputFormat', 'url', 'payload', 'headers', 'matchRegex', 'username', 'password', 'decryptPass']
+    if (draft.isRestmon && restmonSpecific.includes(fieldName)) {
+      if (typeof draft.args === 'object' && draft.args) {
+        return (draft.args as any)[fieldName] || ''
+      } else {
+        return ''
+      }
+    } else if (fieldName === 'args') {
+      return draft.args || ''
+    } else {
+      return (draft as any)[fieldName] || ''
+    }
+  }
+
   const save = () => {
     dispatch(updateScript({ deviceId: device.id, script: draft }))
     onChange(draft)
@@ -75,152 +130,180 @@ export default forwardRef<ScriptFormHandle, { device: Device, script: ScriptInst
   return (
     <Stack spacing={2}>
       <Typography variant='h6'>Edit Script</Typography>
-      <FormControlLabel control={<Checkbox checked={draft.isRestmon ?? false} onChange={e => setDraft(prev => ({ ...prev, isRestmon: e.target.checked }))} />} label="Is Restmon Script" />
+      <FormControlLabel control={<Checkbox checked={draft.isRestmon ?? false} onChange={e => setDraft(prev => {
+        const next = { ...prev, isRestmon: e.target.checked }
+        if (next.isRestmon) {
+          if (typeof next.args !== 'object') next.args = {}
+        } else {
+          if (typeof next.args === 'object') next.args = ''
+        }
+        return next
+      })} />} label="Is Restmon Script" />
       <Grid container spacing={2}>
-        <Grid item xs={12} md={6}>
-          <TextField label='Instance Name' fullWidth value={draft.instanceName} onChange={e => set('instanceName', e.target.value)} />
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <TextField label='Script Path' fullWidth value={draft.scriptPath} onChange={e => set('scriptPath', e.target.value)} />
-        </Grid>
-        {draft.isRestmon ? (
-          <>
-            <Grid item xs={12} md={6}>
-              <TextField label='Method' select fullWidth value={draft.args.method || 'GET'} onChange={e => set('args.method', e.target.value)}>
-                <MenuItem value='GET'>GET</MenuItem>
-                <MenuItem value='POST'>POST</MenuItem>
-                <MenuItem value='PUT'>PUT</MenuItem>
-                <MenuItem value='PATCH'>PATCH</MenuItem>
-                <MenuItem value='DELETE'>DELETE</MenuItem>
-                <MenuItem value='HEAD'>HEAD</MenuItem>
-                <MenuItem value='OPTIONS'>OPTIONS</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField label='Output Format' select fullWidth value={draft.args.outputFormat || 'json'} onChange={e => set('args.outputFormat', e.target.value)}>
-                <MenuItem value='json'>json</MenuItem>
-                <MenuItem value='xml'>xml</MenuItem>
-                <MenuItem value='text'>text</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField label='URL' fullWidth value={draft.args.url || ''} onChange={e => set('args.url', e.target.value)} />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField label='Payload (POST only)' fullWidth value={draft.args.payload || ''} onChange={e => set('args.payload', e.target.value)} />
-            </Grid>
-            <Grid item xs={12}>
-              <Tooltip title='Example: @{"Content-Type" = "application/json"; "Authorization" = "token"}'>
+        {fieldsToShow.map(field => {
+          const value = getValue(field.name)
+          const isSelect = field.type === 'select'
+          const isTextarea = field.type === 'textarea'
+          const isPassword = field.type === 'password'
+          const isNumber = field.type === 'number'
+
+          if (field.name === 'headers') {
+            return (
+              <Grid item xs={12} key={field.name}>
+                <Tooltip title='Example: @{"Content-Type" = "application/json"; "Authorization" = "token"}'>
+                  <TextField
+                    label={field.label}
+                    fullWidth
+                    value={value}
+                    onChange={e => { set(field.name, e.target.value); setHeadersError(!validateHeaders(e.target.value)) }}
+                    error={headersError}
+                    helperText={headersError ? 'Invalid format. Must be a PowerShell hashtable like @{"key"="value"}' : ''}
+                  />
+                </Tooltip>
+              </Grid>
+            )
+          }
+
+          if (field.name === 'payload') {
+            return (
+              <Grid item xs={12} key={field.name}>
                 <TextField
-                  label='Headers'
+                  label={field.label}
                   fullWidth
-                  value={draft.args.headers || ''}
-                  onChange={e => { set('args.headers', e.target.value); setHeadersError(!validateHeaders(e.target.value)) }}
-                  error={headersError}
-                  helperText={headersError ? 'Invalid format. Must be a PowerShell hashtable like @{"key"="value"}' : ''}
+                  value={value}
+                  onChange={e => { set(field.name, e.target.value); setPayloadError(!validatePayload(e.target.value, draft.args.outputFormat || 'json')) }}
+                  error={payloadError}
+                  helperText={payloadError ? `Invalid ${draft.args.outputFormat || 'json'} format` : ''}
                 />
-              </Tooltip>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField label='Regex Match' fullWidth value={draft.args.matchRegex || ''} onChange={e => set('args.matchRegex', e.target.value.replace(/[‘’“”]/g, "'"))} />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField label='Poll (sec)' type='number' fullWidth value={draft.pollIntervalSec || 300} onChange={e => set('poll', e.target.value)} />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField label='Timeout (sec)' type='number' fullWidth value={draft.timeoutSec || 300} onChange={e => set('timeout', e.target.value)} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField label='Username' fullWidth value={draft.args.username || ''} onChange={e => set('args.username', e.target.value)} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <TextField label='Password' type='password' fullWidth value={draft.args.password || ''} onChange={e => set('args.password', e.target.value)} />
-                <Button size='small' variant='outlined'
-                  onClick={async () => {
-                    const pw = draft.args.password || '';
-                    if (!pw) { alert('Enter a password to encrypt'); return; }
+              </Grid>
+            )
+          }
 
-                    try {
-                      // 1) UTF‑16LE bytes of the password (NO null terminator)
-                      const pwBytes = new Uint8Array(pw.length * 2);
-                      for (let i = 0; i < pw.length; i++) {
-                        const code = pw.charCodeAt(i);
-                        pwBytes[i * 2] = code & 0xFF;        // little-endian
-                        pwBytes[i * 2 + 1] = code >> 8;
+          if (field.name === 'password') {
+            return (
+              <Grid item xs={12} md={6} key={field.name}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <TextField
+                    label={field.label}
+                    type={isPassword ? 'password' : 'text'}
+                    fullWidth
+                    value={value}
+                    onChange={e => set(field.name, e.target.value)}
+                  />
+                  <Button size='small' variant='outlined'
+                    onClick={async () => {
+                      const pw = value;
+                      if (!pw) { alert('Enter a password to encrypt'); return; }
+
+                      try {
+                        // 1) UTF‑16LE bytes of the password (NO null terminator)
+                        const pwBytes = new Uint8Array(pw.length * 2);
+                        for (let i = 0; i < pw.length; i++) {
+                          const code = pw.charCodeAt(i);
+                          pwBytes[i * 2] = code & 0xFF;        // little-endian
+                          pwBytes[i * 2 + 1] = code >> 8;
+                        }
+
+                        // 2) 32-byte key = (1..32)
+                        const keyBytes = new Uint8Array(32);
+                        for (let i = 0; i < 32; i++) keyBytes[i] = i + 1;
+                        const key = await crypto.subtle.importKey(
+                          'raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt']
+                        );
+
+                        // 3) Random 16-byte IV
+                        const iv = crypto.getRandomValues(new Uint8Array(16));
+
+                        // 4) Encrypt (AES-CBC, PKCS#7 padding)
+                        const ctBuf = await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, pwBytes);
+                        const ct = new Uint8Array(ctBuf);
+
+                        // 5) Build V2 package: HEADER + base64( UTF-16LE("2|<IV-b64>|<cipher-hex>") )
+                        const HEADER = '76492d1116743f0423413b16050a5345'; // SecureStringExportHeader
+
+                        // IV → Base64
+                        const ivB64 = btoa(String.fromCharCode(...iv));
+
+                        // Ciphertext → lowercase hex
+                        const cipherHex = Array.from(ct).map(b => b.toString(16).padStart(2, '0')).join('');
+
+                        // "2|<IV>|<HEX>"
+                        const pkg = `2|${ivB64}|${cipherHex}`;
+
+                        // UTF‑16LE encode the package string
+                        const pkgUtf16 = new Uint8Array(pkg.length * 2);
+                        for (let i = 0; i < pkg.length; i++) {
+                          const code = pkg.charCodeAt(i);
+                          pkgUtf16[i * 2] = code & 0xFF;
+                          pkgUtf16[i * 2 + 1] = code >> 8;
+                        }
+
+                        // Base64 encode UTF‑16LE bytes
+                        let b64Input = '';
+                        for (let i = 0; i < pkgUtf16.length; i++) b64Input += String.fromCharCode(pkgUtf16[i]);
+                        const encoded = btoa(b64Input);
+
+                        const finalString = HEADER + encoded;
+
+                        set('password', finalString);
+                        set('decryptPass', 'TRUE');
+                      } catch (e) {
+                        console.error('Encryption failed', e);
                       }
+                    }}>Encrypt Pass</Button>
+                </div>
+              </Grid>
+            )
+          }
 
-                      // 2) 32-byte key = (1..32)
-                      const keyBytes = new Uint8Array(32);
-                      for (let i = 0; i < 32; i++) keyBytes[i] = i + 1;
-                      const key = await crypto.subtle.importKey(
-                        'raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt']
-                      );
+          if (field.name === 'decryptPass') {
+            return (
+              <Grid item xs={12} md={6} key={field.name}>
+                <TextField
+                  label={field.label}
+                  select
+                  fullWidth
+                  value={value}
+                  onChange={e => set(field.name, e.target.value)}
+                >
+                  {field.options?.map(option => (
+                    <MenuItem key={option} value={option}>{option}</MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+            )
+          }
 
-                      // 3) Random 16-byte IV
-                      const iv = crypto.getRandomValues(new Uint8Array(16));
-
-                      // 4) Encrypt (AES-CBC, PKCS#7 padding)
-                      const ctBuf = await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, pwBytes);
-                      const ct = new Uint8Array(ctBuf);
-
-                      // 5) Build V2 package: HEADER + base64( UTF-16LE("2|<IV-b64>|<cipher-hex>") )
-                      const HEADER = '76492d1116743f0423413b16050a5345'; // SecureStringExportHeader
-
-                      // IV → Base64
-                      const ivB64 = btoa(String.fromCharCode(...iv));
-
-                      // Ciphertext → lowercase hex
-                      const cipherHex = Array.from(ct).map(b => b.toString(16).padStart(2, '0')).join('');
-
-                      // "2|<IV>|<HEX>"
-                      const pkg = `2|${ivB64}|${cipherHex}`;
-
-                      // UTF‑16LE encode the package string
-                      const pkgUtf16 = new Uint8Array(pkg.length * 2);
-                      for (let i = 0; i < pkg.length; i++) {
-                        const code = pkg.charCodeAt(i);
-                        pkgUtf16[i * 2] = code & 0xFF;
-                        pkgUtf16[i * 2 + 1] = code >> 8;
-                      }
-
-                      // Base64 encode UTF‑16LE bytes
-                      let b64Input = '';
-                      for (let i = 0; i < pkgUtf16.length; i++) b64Input += String.fromCharCode(pkgUtf16[i]);
-                      const encoded = btoa(b64Input);
-
-                      const finalString = HEADER + encoded;
-
-                      set('args.password', finalString);
-                      set('args.decryptPass', 'TRUE');
-                    } catch (e) {
-                      console.error('Encryption failed', e);
-                    }
-                  }}>Encrypt Pass</Button>
-              </div>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField label='Decrypt Pass' select fullWidth value={draft.args.decryptPass || 'FALSE'} onChange={e => set('args.decryptPass', e.target.value)}>
-                <MenuItem value='TRUE'>TRUE</MenuItem>
-                <MenuItem value='FALSE'>FALSE</MenuItem>
+          return (
+            <Grid item xs={12} md={
+              field.name === 'url' || field.name === 'payload' || field.name === 'args' || field.name === 'regexField' ? 12 :
+              field.name === 'pollIntervalSec' || field.name === 'timeoutSec' ? 3 :
+              6
+            } key={field.name}>
+              <TextField
+                label={field.label}
+                type={isPassword ? 'password' : isNumber ? 'number' : 'text'}
+                select={isSelect}
+                multiline={isTextarea}
+                minRows={isTextarea ? 3 : undefined}
+                fullWidth
+                value={value}
+                onChange={e => set(field.name, e.target.value)}
+              >
+                {isSelect && field.options?.map(option => (
+                  <MenuItem key={option} value={option}>{option}</MenuItem>
+                ))}
               </TextField>
             </Grid>
-            <Grid item xs={12}>
-              <TextField label='Trailing regex field (FBCSKM slot)' fullWidth value={draft.regexField || ''} onChange={e => set('regexField', e.target.value)} />
-            </Grid>
-          </>
-        ) : (
-          <Grid item xs={12}>
-            <TextField label='Arguments' fullWidth multiline value={draft.args || ''} onChange={e => setDraft(prev => ({ ...prev, args: e.target.value }))} />
-          </Grid>
-        )}
+          )
+        })}
         <Grid item xs={12}>
           <TextField label={draft.isRestmon ? 'Encoded Command Preview' : 'Arguments Preview'} fullWidth multiline minRows={2} value={encodedPreview} InputProps={{ readOnly: true }} />
         </Grid>
       </Grid>
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button variant='contained' sx={{ backgroundColor: 'white', color: 'black' }} onClick={() => {
-          const cmd = draft.scriptPath + (draft.isRestmon ? encodedPreview : (' ' + (draft.args || '')))
+          const cmd = draft.scriptPath + (draft.isRestmon ? ' ' + encodedPreview.replace(/<BMC_SEP>/g, '|').replace(/<BMC_STAR>/g, '*') : (' ' + (draft.args || '')))
           const results = '(placeholder - command not executed)'
           setDryRunResults({ command: cmd, results })
           setDryRunOpen(true)

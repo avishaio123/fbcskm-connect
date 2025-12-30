@@ -1,6 +1,7 @@
 
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 import { v4 as uuid } from 'uuid'
+import config from '../config'
 
 export interface RestMonArgs {
   url?: string
@@ -183,21 +184,26 @@ function parseLine(line: string) {
 
   for (const seg of segments) {
     if (!seg.trim()) continue
-    const parts = seg.split('*')
-    if (parts.length < 2) continue
+    const parts = seg.split(config.scriptStructure.delimiter)
+    // Pad parts to match fields length
+    while (parts.length < config.scriptStructure.fields.length) parts.push('')
 
-    const instanceName = parts[0]
-    const scriptPath = parts[1]
-    const argstrRaw = parts.length >= 3 ? parts[2] : ''
+    let instanceName = '', scriptPath = '', argstrRaw = '', poll: number | undefined, tout: number | undefined, regex: string | undefined
+
+    config.scriptStructure.fields.forEach((field, i) => {
+      const value = parts[i] || ''
+      if (field === 'instanceName') instanceName = value
+      else if (field === 'scriptPath') scriptPath = value
+      else if (field === 'args') argstrRaw = value
+      else if (field === 'poll') poll = value ? Number(value) : undefined
+      else if (field === 'timeout') tout = value ? Number(value) : undefined
+      else if (field === 'regex') regex = value || undefined
+    })
 
     // Decode protocol placeholders back to raw characters
     const argstr = argstrRaw
       .replace(/<BMC_SEP>/g, '|')
       .replace(/<BMC_STAR>/g, '*')
-
-    const poll = (parts.length >= 4 && parts[3]) ? Number(parts[3]) : undefined
-    const tout = (parts.length >= 5 && parts[4]) ? Number(parts[4]) : undefined
-    const regex = parts.length >= 6 ? parts[5] : undefined
 
     const args = parseArgsToStruct(argstr)
     const isRestmon = argstr.includes('-') // Simple check: if has -, it's Restmon
