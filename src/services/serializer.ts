@@ -1,5 +1,6 @@
 
 import { Device } from '../store/fbcskmSlice'
+import config from '../config'
 
 /**
  * Safely wrap a value in single quotes for shell-like serialization.
@@ -44,6 +45,23 @@ function structToArgString(args: any): string {
   return parts.length ? ` ${s} ` : ' '
 }
 
+function serializeScript(s: any): string {
+  const values = config.scriptStructure.fields.map(field => {
+    if (field === '') return ''
+    let value: any = ''
+    if (field === 'instanceName') value = s.instanceName ?? ''
+    else if (field === 'scriptPath') value = s.scriptPath ?? ''
+    else if (field === 'args') {
+      value = s.isRestmon ? structToArgString(s.args) : encodeSpecials(s.args ?? '')
+    }
+    else if (field === 'poll') value = s.pollIntervalSec ?? ''
+    else if (field === 'timeout') value = s.timeoutSec ?? ''
+    else if (field === 'regex') value = s.regexField ?? ''
+    return value
+  })
+  return values.join(config.scriptStructure.delimiter)
+}
+
 function serializeDevice(dev: Device): string {
   const devSeg = [
     dev.name ?? '',
@@ -58,16 +76,7 @@ function serializeDevice(dev: Device): string {
     dev.passphrase ?? ''
   ].join(',')
 
-  const scripts = (dev.scripts ?? []).map((s) => {
-    const argsStr = s.isRestmon ? structToArgString(s?.args) : (s?.args ?? '')
-    const poll = s?.pollIntervalSec ?? ''
-    const tout = s?.timeoutSec ?? ''
-    const reg = s?.regexField ?? ''
-    const instanceName = s?.instanceName ?? ''
-    const scriptPath = s?.scriptPath ?? ''
-
-    return `${instanceName}*${scriptPath}*${argsStr}*${poll}*${tout}*${reg}|`
-  })
+  const scripts = (dev.scripts ?? []).map(serializeScript)
 
   return [devSeg, ...scripts].join('|')
 }

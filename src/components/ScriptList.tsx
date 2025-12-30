@@ -157,7 +157,7 @@ export default function ScriptList({ deviceId, selectedId, onSelect, onRequestEd
 
   const create = () => {
     // Generate unique instance name
-    let baseName = 'NEW_Script'
+    let baseName = instanceName.trim() || 'NEW_Script'
     let counter = 0
     let uniqueName = baseName
     while (dev.scripts.some(s => s.instanceName === uniqueName)) {
